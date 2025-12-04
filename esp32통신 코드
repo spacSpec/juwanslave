@@ -1,0 +1,53 @@
+#include <WiFi.h>
+
+// ====== WiFi 정보 입력 ======
+const char* ssid = "ConnectValue_A402_2G";
+const char* password = "CVA402!@#$";
+
+WiFiServer server(5000);  // 포트 5000
+WiFiClient client;
+
+// ⚠ Serial2는 이미 ESP32 내부에서 생성됨!  
+// HardwareSerial Serial2(2);  // ❌ 삭제해야 함!
+
+void setup() {
+  Serial.begin(115200);      // PC 모니터 확인용
+  Serial2.begin(115200, SERIAL_8N1, 16, 17);  // RX2=16, TX2=17
+
+  Serial.println("WiFi Connecting...");
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi Connected!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  server.begin();
+}
+
+void loop() {
+  // 클라이언트 연결 대기
+  if (!client || !client.connected()) {
+    client = server.accept();
+    if (client) {
+      Serial.println("Client Connected!");
+    }
+  }
+
+  // 클라이언트 명령 수신
+  if (client && client.available()) {
+    char cmd = client.read();
+    Serial.print("Received: ");
+    Serial.println(cmd);
+
+    // STM32로 전송
+    Serial2.write(cmd);
+
+    // PC로 에코
+    client.write(cmd);
+  }
+}
