@@ -1,0 +1,32 @@
+running develop
+Removing /home/taehwan/ros2_ws/install/ros_controller_pkg/lib/python3.10/site-packages/ros-controller-pkg.egg-link (link to .)
+running egg_info
+writing ../../build/ros_controller_pkg/ros_controller_pkg.egg-info/PKG-INFO
+writing dependency_links to ../../build/ros_controller_pkg/ros_controller_pkg.egg-info/dependency_links.txt
+writing entry points to ../../build/ros_controller_pkg/ros_controller_pkg.egg-info/entry_points.txt
+writing requirements to ../../build/ros_controller_pkg/ros_controller_pkg.egg-info/requires.txt
+writing top-level names to ../../build/ros_controller_pkg/ros_controller_pkg.egg-info/top_level.txt
+reading manifest file '../../build/ros_controller_pkg/ros_controller_pkg.egg-info/SOURCES.txt'
+writing manifest file '../../build/ros_controller_pkg/ros_controller_pkg.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/taehwan/ros2_ws/build/ros_controller_pkg/build
+creating /home/taehwan/ros2_ws/build/ros_controller_pkg/build/lib
+creating /home/taehwan/ros2_ws/build/ros_controller_pkg/build/lib/ros_controller_pkg
+copying ros_controller_pkg/ros_controller.py -> /home/taehwan/ros2_ws/build/ros_controller_pkg/build/lib/ros_controller_pkg
+copying ros_controller_pkg/__init__.py -> /home/taehwan/ros2_ws/build/ros_controller_pkg/build/lib/ros_controller_pkg
+running install
+running install_lib
+creating /home/taehwan/ros2_ws/install/ros_controller_pkg/lib/python3.10/site-packages/ros_controller_pkg
+copying /home/taehwan/ros2_ws/build/ros_controller_pkg/build/lib/ros_controller_pkg/ros_controller.py -> /home/taehwan/ros2_ws/install/ros_controller_pkg/lib/python3.10/site-packages/ros_controller_pkg
+copying /home/taehwan/ros2_ws/build/ros_controller_pkg/build/lib/ros_controller_pkg/__init__.py -> /home/taehwan/ros2_ws/install/ros_controller_pkg/lib/python3.10/site-packages/ros_controller_pkg
+byte-compiling /home/taehwan/ros2_ws/install/ros_controller_pkg/lib/python3.10/site-packages/ros_controller_pkg/ros_controller.py to ros_controller.cpython-310.pyc
+byte-compiling /home/taehwan/ros2_ws/install/ros_controller_pkg/lib/python3.10/site-packages/ros_controller_pkg/__init__.py to __init__.cpython-310.pyc
+running install_data
+copying resource/ros_controller_pkg -> /home/taehwan/ros2_ws/install/ros_controller_pkg/share/ament_index/resource_index/packages
+copying package.xml -> /home/taehwan/ros2_ws/install/ros_controller_pkg/share/ros_controller_pkg
+running install_egg_info
+Copying ../../build/ros_controller_pkg/ros_controller_pkg.egg-info to /home/taehwan/ros2_ws/install/ros_controller_pkg/lib/python3.10/site-packages/ros_controller_pkg-0.0.0-py3.10.egg-info
+running install_scripts
+Installing ros_controller script to /home/taehwan/ros2_ws/install/ros_controller_pkg/lib/ros_controller_pkg
+writing list of installed files to '/home/taehwan/ros2_ws/build/ros_controller_pkg/install.log'

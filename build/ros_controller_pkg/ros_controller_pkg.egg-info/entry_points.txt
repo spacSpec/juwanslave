@@ -1,0 +1,3 @@
+[console_scripts]
+ros_controller = ros_controller_pkg.ros_controller:main
+
