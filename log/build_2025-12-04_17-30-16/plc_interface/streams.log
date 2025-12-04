@@ -1,0 +1,34 @@
+[0.646s] Invoking command in '/home/taehwan/ros2_ws/src/plc_interface': PYTHONPATH=/home/taehwan/ros2_ws/build/plc_interface/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/plc_interface build --build-base /home/taehwan/ros2_ws/build/plc_interface/build install --record /home/taehwan/ros2_ws/build/plc_interface/install.log --single-version-externally-managed install_data
+[0.902s] running egg_info
+[0.902s] creating ../../build/plc_interface/plc_interface.egg-info
+[0.902s] writing ../../build/plc_interface/plc_interface.egg-info/PKG-INFO
+[0.902s] writing dependency_links to ../../build/plc_interface/plc_interface.egg-info/dependency_links.txt
+[0.902s] writing entry points to ../../build/plc_interface/plc_interface.egg-info/entry_points.txt
+[0.902s] writing requirements to ../../build/plc_interface/plc_interface.egg-info/requires.txt
+[0.902s] writing top-level names to ../../build/plc_interface/plc_interface.egg-info/top_level.txt
+[0.904s] writing manifest file '../../build/plc_interface/plc_interface.egg-info/SOURCES.txt'
+[0.905s] reading manifest file '../../build/plc_interface/plc_interface.egg-info/SOURCES.txt'
+[0.906s] writing manifest file '../../build/plc_interface/plc_interface.egg-info/SOURCES.txt'
+[0.906s] running build
+[0.906s] running build_py
+[0.906s] creating /home/taehwan/ros2_ws/build/plc_interface/build
+[0.906s] creating /home/taehwan/ros2_ws/build/plc_interface/build/lib
+[0.906s] creating /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface
+[0.906s] copying plc_interface/plc_node.py -> /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface
+[0.907s] copying plc_interface/__init__.py -> /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface
+[0.907s] running install
+[0.907s] running install_lib
+[0.907s] creating /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface
+[0.907s] copying /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface/plc_node.py -> /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface
+[0.907s] copying /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface/__init__.py -> /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface
+[0.908s] byte-compiling /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface/plc_node.py to plc_node.cpython-310.pyc
+[0.909s] byte-compiling /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface/__init__.py to __init__.cpython-310.pyc
+[0.909s] running install_data
+[0.909s] creating /home/taehwan/ros2_ws/install/plc_interface/share/ament_index
+[0.909s] creating /home/taehwan/ros2_ws/install/plc_interface/share/ament_index/resource_index
+[0.909s] creating /home/taehwan/ros2_ws/install/plc_interface/share/ament_index/resource_index/packages
+[0.909s] copying resource/plc_interface -> /home/taehwan/ros2_ws/install/plc_interface/share/ament_index/resource_index/packages
+[0.909s] copying package.xml -> /home/taehwan/ros2_ws/install/plc_interface/share/plc_interface
+[0.910s] creating /home/taehwan/ros2_ws/install/plc_interface/share/plc_interface/launch
+[0.910s] error: can't copy 'launch/plc_node.launch.py': doesn't exist or not a regular file
+[0.922s] Invoked command in '/home/taehwan/ros2_ws/src/plc_interface' returned '1': PYTHONPATH=/home/taehwan/ros2_ws/build/plc_interface/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/plc_interface build --build-base /home/taehwan/ros2_ws/build/plc_interface/build install --record /home/taehwan/ros2_ws/build/plc_interface/install.log --single-version-externally-managed install_data

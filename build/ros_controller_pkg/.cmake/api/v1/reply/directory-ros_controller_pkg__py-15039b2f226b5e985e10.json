@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "ros_controller_pkg__py",
+		"source" : "/home/taehwan/ros2_ws/build/ros_controller_pkg/ros_controller_pkg__py"
+	}
+}

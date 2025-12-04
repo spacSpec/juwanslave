@@ -1,0 +1,19 @@
+{
+  "package_name": "ros_controller_pkg",
+  "output_dir": "/home/taehwan/ros2_ws/build/ros_controller_pkg/rosidl_typesupport_fastrtps_cpp/ros_controller_pkg",
+  "template_dir": "/home/taehwan/ros2_humble/install/rosidl_typesupport_fastrtps_cpp/share/rosidl_typesupport_fastrtps_cpp/resource",
+  "idl_tuples": [
+    "/home/taehwan/ros2_ws/build/ros_controller_pkg/rosidl_adapter/ros_controller_pkg:msg/PlcStatus.idl"
+  ],
+  "target_dependencies": [
+    "/home/taehwan/ros2_humble/install/rosidl_typesupport_fastrtps_cpp/lib/rosidl_typesupport_fastrtps_cpp/rosidl_typesupport_fastrtps_cpp",
+    "/home/taehwan/ros2_humble/install/rosidl_typesupport_fastrtps_cpp/local/lib/python3.10/dist-packages/rosidl_typesupport_fastrtps_cpp/__init__.py",
+    "/home/taehwan/ros2_humble/install/rosidl_typesupport_fastrtps_cpp/share/rosidl_typesupport_fastrtps_cpp/resource/idl__rosidl_typesupport_fastrtps_cpp.hpp.em",
+    "/home/taehwan/ros2_humble/install/rosidl_typesupport_fastrtps_cpp/share/rosidl_typesupport_fastrtps_cpp/resource/idl__type_support.cpp.em",
+    "/home/taehwan/ros2_humble/install/rosidl_typesupport_fastrtps_cpp/share/rosidl_typesupport_fastrtps_cpp/resource/msg__rosidl_typesupport_fastrtps_cpp.hpp.em",
+    "/home/taehwan/ros2_humble/install/rosidl_typesupport_fastrtps_cpp/share/rosidl_typesupport_fastrtps_cpp/resource/msg__type_support.cpp.em",
+    "/home/taehwan/ros2_humble/install/rosidl_typesupport_fastrtps_cpp/share/rosidl_typesupport_fastrtps_cpp/resource/srv__rosidl_typesupport_fastrtps_cpp.hpp.em",
+    "/home/taehwan/ros2_humble/install/rosidl_typesupport_fastrtps_cpp/share/rosidl_typesupport_fastrtps_cpp/resource/srv__type_support.cpp.em",
+    "/home/taehwan/ros2_ws/build/ros_controller_pkg/rosidl_adapter/ros_controller_pkg/msg/PlcStatus.idl"
+  ]
+}

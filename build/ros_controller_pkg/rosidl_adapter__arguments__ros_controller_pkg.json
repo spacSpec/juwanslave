@@ -1,0 +1,6 @@
+{
+  "package_name": "ros_controller_pkg",
+  "non_idl_tuples": [
+    "/home/taehwan/ros2_ws/src/ros_controller_pkg:msg/PlcStatus.msg"
+  ]
+}
