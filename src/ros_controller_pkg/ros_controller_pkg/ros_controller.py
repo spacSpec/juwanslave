@@ -5,7 +5,7 @@ import rclpy
 from rclpy.node import Node
 
 from std_msgs.msg import Bool
-from std_srvs.srv import SetBool
+from std_srvs.srv import SetBool, Trigger
 
 from ros_controller_pkg.msg import PlcStatus
 
@@ -35,9 +35,13 @@ class RosController(Node):
 
         # ─────────────────────────────────────────────
         # 3) ros_controller → RobotArm (publish)
-        #    - door_open 상태 공유
+        #    - fence_open 상태 공유
         # ─────────────────────────────────────────────
-        self.pub_robotarm_door_open = self.create_publisher(Bool, '/robotarm/door_open', 10)
+        self.pub_robotarm_fence_open = self.create_publisher(
+            Bool,
+            '/robotarm/fence_open',
+            10
+        )
 
         # ─────────────────────────────────────────────
         # 4) RobotArm → ros_controller (service server)
@@ -55,19 +59,22 @@ class RosController(Node):
             self.get_logger().warn("/agv/request_dispatch not available at startup")
 
         # ─────────────────────────────────────────────
-        # 5) PLC → ros_controller (service server)
-        #    ros_controller → RobotArm (service client)
-        #    /plc/robotarm_detect <-> /robotarm/robotarm_detect
+        # 5) PLC → ros_controller (service server, SetBool)
+        #    ros_controller → RobotArm (service client, Trigger)
+        #    /plc/robotarm_detect <-> /robot_arm/detect
         # ─────────────────────────────────────────────
         self.srv_plc_robotarm_detect = self.create_service(
             SetBool,
             '/plc/robotarm_detect',
             self.cb_plc_robotarm_detect
         )
-        self.robotarm_client = self.create_client(SetBool, '/robotarm/robotarm_detect')
+        self.robotarm_detect_client = self.create_client(
+            Trigger,
+            '/robot_arm/detect'
+        )
 
-        if not self.robotarm_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().warn("/robotarm/robotarm_detect not available at startup")
+        if not self.robotarm_detect_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().warn("/robot_arm/detect not available at startup")
 
     # ─────────────────────────────────────────────
     #  PLC 통합 상태 콜백
@@ -83,8 +90,8 @@ class RosController(Node):
         self.pub_fence_open.publish(Bool(data=msg.fence_open))
         self.pub_door_open.publish(Bool(data=msg.door_open))
 
-        # RobotArm 쪽에도 door_open 공유
-        self.pub_robotarm_door_open.publish(Bool(data=msg.door_open))
+        # RobotArm 쪽에도 fence_open 공유
+        self.pub_robotarm_fence_open.publish(Bool(data=msg.fence_open))
 
         self.get_logger().info(
             f"[PLC STATUS] empty={msg.is_empty}, "
@@ -97,7 +104,7 @@ class RosController(Node):
     def cb_request_dispatch(self, request, response):
         """
         로봇암 task_manager에서 Bool 요청을 받으면
-        AGV의 /agv/request_dispatch 서비스에 그대로 전달.
+        AGV의 /agv/request_dispatch(SetBool) 서비스에 그대로 전달.
         """
 
         if not self.agv_client.service_is_ready():
@@ -134,45 +141,73 @@ class RosController(Node):
         return response
 
     # ─────────────────────────────────────────────
-    #  PLC → ros_controller → RobotArm 서비스 브릿지
+    #  PLC(SetBool) → ros_controller → RobotArm(Trigger) 서비스 브릿지
     # ─────────────────────────────────────────────
     def cb_plc_robotarm_detect(self, request, response):
         """
         PLC가 /plc/robotarm_detect(SetBool)을 호출하면,
-        ros_controller가 /robotarm/robotarm_detect(SetBool) 으로 그대로 전달.
+        ros_controller가 /robot_arm/detect(Trigger)로 검사 요청을 보내고,
+        RobotArm의 결과("GOOD"/"BAD"/...)를 SetBool 응답(success/message)으로
+        변환하여 PLC에게 반환한다.
+
+        매핑 규칙:
+          - RobotArm Trigger 응답 success=False → SetBool.success=False
+          - success=True + message="GOOD"      → SetBool.success=True,  message="GOOD"
+          - success=True + message="BAD"       → SetBool.success=False, message="BAD"
         """
 
-        if not self.robotarm_client.service_is_ready():
-            self.get_logger().warn("/robotarm/robotarm_detect NOT ready")
+        if not self.robotarm_detect_client.service_is_ready():
+            self.get_logger().warn("/robot_arm/detect NOT ready")
             response.success = False
             response.message = "RobotArm service not available"
             return response
 
-        req = SetBool.Request()
-        req.data = request.data  # 보통 True: 검사 시작
-
+        # PLC 쪽 request.data 는 "검사해주세요" 의미 (보통 True)
         self.get_logger().info(
-            f"[PLC] /plc/robotarm_detect: {request.data} → /robotarm/robotarm_detect"
+            f"[PLC] /plc/robotarm_detect called, data={request.data} "
+            f"→ call /robot_arm/detect (Trigger)"
         )
 
-        future = self.robotarm_client.call_async(req)
+        trigger_req = Trigger.Request()  # Trigger는 요청 필드가 없음
+        future = self.robotarm_detect_client.call_async(trigger_req)
         rclpy.spin_until_future_complete(self, future)
 
-        if future.result() is not None:
-            arm_res = future.result()
-
-            self.get_logger().info(
-                f"[RobotArm] response: success={arm_res.success}, "
-                f"message={arm_res.message}"
-            )
-
-            # RobotArm 응답을 그대로 PLC에게 반환
-            response.success = arm_res.success
-            response.message = arm_res.message
-        else:
-            self.get_logger().error("RobotArm service call failed")
+        if future.result() is None:
+            self.get_logger().error("RobotArm /robot_arm/detect call failed")
             response.success = False
             response.message = "RobotArm service call failed"
+            return response
+
+        arm_res = future.result()  # Trigger.Response
+        self.get_logger().info(
+            f"[RobotArm] /robot_arm/detect response: "
+            f"success={arm_res.success}, message='{arm_res.message}'"
+        )
+
+        # 1) 검사 수행 자체가 실패한 경우
+        if not arm_res.success:
+            response.success = False
+            response.message = arm_res.message or "DETECT_FAILED"
+            return response
+
+        # 2) 성공적으로 검사 완료 → message로 GOOD/BAD/기타 판별
+        quality = (arm_res.message or "").upper()
+
+        if quality == "GOOD":
+            # ✅ GOOD → PLC 입장에선 True
+            response.success = True
+            response.message = "GOOD"
+        elif quality == "BAD":
+            # ❌ BAD → PLC 입장에선 False
+            response.success = False
+            response.message = "BAD"
+        else:
+            # 예외적인 문자열이면 BAD 취급
+            self.get_logger().warn(
+                f"[RobotArm] unknown quality '{arm_res.message}', treat as BAD"
+            )
+            response.success = False
+            response.message = arm_res.message or "UNKNOWN"
 
         return response
 

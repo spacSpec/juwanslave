@@ -1,0 +1,37 @@
+[0.960s] Invoking command in '/home/taehwan/ros2_ws/src/stm_controller': PYTHONPATH=/home/taehwan/ros2_ws/build/stm_controller/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/stm_controller build --build-base /home/taehwan/ros2_ws/build/stm_controller/build install --record /home/taehwan/ros2_ws/build/stm_controller/install.log --single-version-externally-managed install_data
+[1.201s] running egg_info
+[1.202s] creating ../../build/stm_controller/stm_controller.egg-info
+[1.202s] writing ../../build/stm_controller/stm_controller.egg-info/PKG-INFO
+[1.202s] writing dependency_links to ../../build/stm_controller/stm_controller.egg-info/dependency_links.txt
+[1.202s] writing entry points to ../../build/stm_controller/stm_controller.egg-info/entry_points.txt
+[1.202s] writing requirements to ../../build/stm_controller/stm_controller.egg-info/requires.txt
+[1.202s] writing top-level names to ../../build/stm_controller/stm_controller.egg-info/top_level.txt
+[1.206s] writing manifest file '../../build/stm_controller/stm_controller.egg-info/SOURCES.txt'
+[1.207s] reading manifest file '../../build/stm_controller/stm_controller.egg-info/SOURCES.txt'
+[1.208s] writing manifest file '../../build/stm_controller/stm_controller.egg-info/SOURCES.txt'
+[1.208s] running build
+[1.208s] running build_py
+[1.208s] creating /home/taehwan/ros2_ws/build/stm_controller/build
+[1.208s] creating /home/taehwan/ros2_ws/build/stm_controller/build/lib
+[1.208s] creating /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller
+[1.208s] copying stm_controller/__init__.py -> /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller
+[1.209s] copying stm_controller/stm_node.py -> /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller
+[1.209s] running install
+[1.209s] running install_lib
+[1.209s] creating /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller
+[1.209s] copying /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller/__init__.py -> /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller
+[1.209s] copying /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller/stm_node.py -> /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller
+[1.210s] byte-compiling /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller/__init__.py to __init__.cpython-310.pyc
+[1.210s] byte-compiling /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller/stm_node.py to stm_node.cpython-310.pyc
+[1.211s] running install_data
+[1.211s] creating /home/taehwan/ros2_ws/install/stm_controller/share/ament_index
+[1.211s] creating /home/taehwan/ros2_ws/install/stm_controller/share/ament_index/resource_index
+[1.211s] creating /home/taehwan/ros2_ws/install/stm_controller/share/ament_index/resource_index/packages
+[1.211s] copying resource/stm_controller -> /home/taehwan/ros2_ws/install/stm_controller/share/ament_index/resource_index/packages
+[1.211s] copying package.xml -> /home/taehwan/ros2_ws/install/stm_controller/share/stm_controller
+[1.211s] running install_egg_info
+[1.213s] Copying ../../build/stm_controller/stm_controller.egg-info to /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller-0.1.0-py3.10.egg-info
+[1.213s] running install_scripts
+[1.234s] Installing stm_node script to /home/taehwan/ros2_ws/install/stm_controller/lib/stm_controller
+[1.234s] writing list of installed files to '/home/taehwan/ros2_ws/build/stm_controller/install.log'
+[1.252s] Invoked command in '/home/taehwan/ros2_ws/src/stm_controller' returned '0': PYTHONPATH=/home/taehwan/ros2_ws/build/stm_controller/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/stm_controller build --build-base /home/taehwan/ros2_ws/build/stm_controller/build install --record /home/taehwan/ros2_ws/build/stm_controller/install.log --single-version-externally-managed install_data

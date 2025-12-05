@@ -1,0 +1,3 @@
+[console_scripts]
+stm_node = stm_controller.stm_node:main
+
