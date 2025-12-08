@@ -68,15 +68,6 @@ bool ros_controller_pkg__msg__plc_status__convert_from_py(PyObject * _pymsg, voi
     ros_message->fence_open = (Py_True == field);
     Py_DECREF(field);
   }
-  {  // door_open
-    PyObject * field = PyObject_GetAttrString(_pymsg, "door_open");
-    if (!field) {
-      return false;
-    }
-    assert(PyBool_Check(field));
-    ros_message->door_open = (Py_True == field);
-    Py_DECREF(field);
-  }
 
   return true;
 }
@@ -115,17 +106,6 @@ PyObject * ros_controller_pkg__msg__plc_status__convert_to_py(void * raw_ros_mes
     field = PyBool_FromLong(ros_message->fence_open ? 1 : 0);
     {
       int rc = PyObject_SetAttrString(_pymessage, "fence_open", field);
-      Py_DECREF(field);
-      if (rc) {
-        return NULL;
-      }
-    }
-  }
-  {  // door_open
-    PyObject * field = NULL;
-    field = PyBool_FromLong(ros_message->door_open ? 1 : 0);
-    {
-      int rc = PyObject_SetAttrString(_pymessage, "door_open", field);
       Py_DECREF(field);
       if (rc) {
         return NULL;

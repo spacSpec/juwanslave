@@ -4,7 +4,7 @@
 import rclpy
 from rclpy.node import Node
 
-from ros_controller_pkg.msg import PlcStatus          # PlcStatus.msg (is_empty, fence_open, door_open)
+from ros_controller_pkg.msg import PlcStatus          # PlcStatus.msg (is_empty, fence_open)
 from std_srvs.srv import SetBool                      # 검사 서비스용
 from std_msgs.msg import Bool                         # door_state용
 
@@ -23,7 +23,7 @@ M1 = 0x0001  # is_empty용
 M2 = 0x0002  # 검사 요청
 M3 = 0x0003  # 검사 결과
 M4 = 0x0004  # fence_open 상태
-M5 = 0x0005  # door_open 상태
+# M5 = 0x0005  # 🔥 더 이상 사용 안 함 (door_open 제거)
 
 # coils 메모리 (PC 측 상태 테이블)
 coils = [0] * 256
@@ -52,7 +52,6 @@ class PLCNode(Node):
         # ───── PlcStatus 상태 변수 ─────
         self.is_empty = True
         self.fence_open = False
-        self.door_open = False
 
         # ───── /plc/status_ros 퍼블리셔 ─────
         self.pub_status = self.create_publisher(PlcStatus, '/plc/status_ros', 10)
@@ -63,6 +62,10 @@ class PLCNode(Node):
         # ───── 검사 서비스 클라이언트 (/plc/robotarm_detect) ─────
         # ros_controller가 이 서비스 서버가 될 예정
         self.detect_client = self.create_client(SetBool, '/plc/robotarm_detect')
+
+        # ───── M2 엣지검출 및 busy 플래그 ─────
+        self.m2_prev = 0          # 이전 M2 값 기억
+        self.detect_busy = False  # 검사 진행중이면 True
 
         # ───── Modbus RTU 시리얼 ─────
         self.ser = serial.Serial(
@@ -147,10 +150,18 @@ class PLCNode(Node):
     def process_plc_bit(self, addr, val):
         self.get_logger().info(f"[PLC BIT] addr={addr}, val={val}")
 
-        # ── 검사 요청 (M2) ──
-        if addr == M2 and val == 1:
-            self.get_logger().warn("PLC M2=1 → /plc/robotarm_detect 서비스 요청!")
-            self.call_robot_detect()
+        # ── 검사 요청 (M2, rising edge + busy 체크) ──
+        if addr == M2:
+            # 0 → 1 변화 + 검사중이 아닐 때만
+            if val == 1 and self.m2_prev == 0 and not self.detect_busy:
+                self.get_logger().warn(
+                    "PLC M2 rising edge → /plc/robotarm_detect 서비스 요청!"
+                )
+                self.detect_busy = True
+                self.call_robot_detect()
+
+            # 이전 값 갱신
+            self.m2_prev = val
 
         # ── door_state 명령 (M0) ──
         if addr == M0:
@@ -169,12 +180,8 @@ class PLCNode(Node):
         if addr == M4:
             self.fence_open = (val == 1)
 
-        # ── door_open (M5) ──
-        if addr == M5:
-            self.door_open = (val == 1)
-
         # 상태 비트가 바뀌면 /plc/status_ros 갱신
-        if addr in (M1, M4, M5):
+        if addr in (M1, M4):
             self.publish_status()
 
     # ==============================
@@ -184,13 +191,12 @@ class PLCNode(Node):
         msg = PlcStatus()
         msg.is_empty = self.is_empty
         msg.fence_open = self.fence_open
-        msg.door_open = self.door_open
 
         self.pub_status.publish(msg)
 
         self.get_logger().info(
             f"[PLC STATUS] is_empty={msg.is_empty}, "
-            f"fence_open={msg.fence_open}, door_open={msg.door_open}"
+            f"fence_open={msg.fence_open}"
         )
 
     # ==============================
@@ -200,6 +206,8 @@ class PLCNode(Node):
 
         if not self.detect_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().error("/plc/robotarm_detect 서비스 없음! (ros_controller 확인 필요)")
+            # 서비스가 아예 없을 때도 busy 풀어줘야 다음 요청 가능
+            self.detect_busy = False
             return
 
         req = SetBool.Request()
@@ -221,11 +229,13 @@ class PLCNode(Node):
 
             # GOOD → M3 = 0, BAD → M3 = 1
             coils[M3] = 0 if resp.success else 1
-
             self.get_logger().info(f"[PLC] 검사 결과 M3 코일에 반영: {coils[M3]}")
 
         except Exception as e:
             self.get_logger().error(f"[ERROR] 검사 결과 처리 실패: {e}")
+        finally:
+            # 검사 완료 → 다시 다음 요청 받을 수 있게
+            self.detect_busy = False
 
 
 def main():

@@ -22,7 +22,6 @@ typedef struct ros_controller_pkg__msg__PlcStatus
 {
   bool is_empty;
   bool fence_open;
-  bool door_open;
 } ros_controller_pkg__msg__PlcStatus;
 
 // Struct for a sequence of ros_controller_pkg__msg__PlcStatus.

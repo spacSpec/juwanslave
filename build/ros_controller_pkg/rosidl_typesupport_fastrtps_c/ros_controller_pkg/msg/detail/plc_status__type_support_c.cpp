@@ -59,11 +59,6 @@ static bool _PlcStatus__cdr_serialize(
     cdr << (ros_message->fence_open ? true : false);
   }
 
-  // Field name: door_open
-  {
-    cdr << (ros_message->door_open ? true : false);
-  }
-
   return true;
 }
 
@@ -88,13 +83,6 @@ static bool _PlcStatus__cdr_deserialize(
     uint8_t tmp;
     cdr >> tmp;
     ros_message->fence_open = tmp ? true : false;
-  }
-
-  // Field name: door_open
-  {
-    uint8_t tmp;
-    cdr >> tmp;
-    ros_message->door_open = tmp ? true : false;
   }
 
   return true;
@@ -123,12 +111,6 @@ size_t get_serialized_size_ros_controller_pkg__msg__PlcStatus(
   // field.name fence_open
   {
     size_t item_size = sizeof(ros_message->fence_open);
-    current_alignment += item_size +
-      eprosima::fastcdr::Cdr::alignment(current_alignment, item_size);
-  }
-  // field.name door_open
-  {
-    size_t item_size = sizeof(ros_message->door_open);
     current_alignment += item_size +
       eprosima::fastcdr::Cdr::alignment(current_alignment, item_size);
   }
@@ -175,13 +157,6 @@ size_t max_serialized_size_ros_controller_pkg__msg__PlcStatus(
     last_member_size = array_size * sizeof(uint8_t);
     current_alignment += array_size * sizeof(uint8_t);
   }
-  // member: door_open
-  {
-    size_t array_size = 1;
-
-    last_member_size = array_size * sizeof(uint8_t);
-    current_alignment += array_size * sizeof(uint8_t);
-  }
 
   size_t ret_val = current_alignment - initial_alignment;
   if (is_plain) {
@@ -191,7 +166,7 @@ size_t max_serialized_size_ros_controller_pkg__msg__PlcStatus(
     using DataType = ros_controller_pkg__msg__PlcStatus;
     is_plain =
       (
-      offsetof(DataType, door_open) +
+      offsetof(DataType, fence_open) +
       last_member_size
       ) == ret_val;
   }

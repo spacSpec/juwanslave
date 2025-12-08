@@ -47,6 +47,7 @@ class RosController(Node):
 
         # ─────────────────────────────────────────────
         # 3) ros_controller → AGV (publish)
+        #    ⚠ door_open 은 이제 PLC가 아니라 STM 결과로만 퍼블리시함
         # ─────────────────────────────────────────────
         self.pub_empty = self.create_publisher(Bool, '/agv/is_empty', 10)
         self.pub_fence_open = self.create_publisher(Bool, '/agv/fence_open', 10)
@@ -102,23 +103,27 @@ class RosController(Node):
         """
         PLC에서 온 /plc/status_ros(PlcStatus)를 받아서
         AGV와 RobotArm 쪽으로 각각 필요한 토픽을 퍼블리시.
+
+        ⚠ PlcStatus.msg 에서 door_open 필드를 제거했으므로
+          여기서는 is_empty, fence_open 만 사용한다.
         """
 
-        # AGV로 전달
+        # AGV로 전달 (is_empty, fence_open만)
         self.pub_empty.publish(Bool(data=msg.is_empty))
         self.pub_fence_open.publish(Bool(data=msg.fence_open))
-        self.pub_door_open.publish(Bool(data=msg.door_open))
+        # self.pub_door_open.publish(Bool(data=msg.door_open))  # ← 더 이상 사용 안 함
 
         # RobotArm 쪽에도 fence_open 공유
         self.pub_robotarm_fence_open.publish(Bool(data=msg.fence_open))
 
+        # 로그도 door_open 없이 찍기
         self.get_logger().info(
-            f"[PLC STATUS] empty={msg.is_empty}, "
-            f"fence_open={msg.fence_open}, door_open={msg.door_open}"
+            f"[PLC STATUS] empty={msg.is_empty}, fence_open={msg.fence_open}"
         )
 
     # ─────────────────────────────────────────────
     #  PLC(M0) door_state 토픽 → STM SetBool 서비스 브릿지
+    #    그리고 STM 결과로만 /agv/door_open 을 퍼블리시
     # ─────────────────────────────────────────────
     def cb_plc_door_state(self, msg: Bool):
         """
@@ -126,14 +131,14 @@ class RosController(Node):
         ros_controller가 /plc/door_state (SetBool) 서비스를 STM에게 호출해줌.
 
         - msg.data == True  → 문 열어달라는 명령으로 해석 → 서비스 호출
-        - msg.data == False → 지금은 무시 (원하면 닫기 명령으로 바꿀 수 있음)
+        - msg.data == False → 현재는 무시
         """
         self.get_logger().info(
             f"[PLC] /plc/door_state topic received: {msg.data}"
         )
 
-        # False는 일단 '아무것도 안 함'으로 처리
         if not msg.data:
+            # False 는 현재 '명령 없음/닫기 명령 없음' 으로 처리
             self.get_logger().info(
                 "[STM] door_state=False → STM 서비스 호출 생략"
             )
@@ -153,18 +158,33 @@ class RosController(Node):
         )
 
         future = self.stm_door_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future)
+        future.add_done_callback(self._on_stm_door_state_result)
 
-        if future.result() is not None:
+    def _on_stm_door_state_result(self, future):
+        """STM /plc/door_state 서비스 결과 처리를 위한 콜백."""
+        try:
             res = future.result()
-            self.get_logger().info(
-                f"[STM] /plc/door_state response: "
-                f"success={res.success}, message='{res.message}'"
-            )
-        else:
-            self.get_logger().error(
-                "[STM] /plc/door_state service call failed"
-            )
+        except Exception as e:
+            self.get_logger().error(f"[STM] /plc/door_state call exception: {e}")
+            return
+
+        if res is None:
+            self.get_logger().error("[STM] /plc/door_state result is None")
+            return
+
+        self.get_logger().info(
+            f"[STM] /plc/door_state response: "
+            f"success={res.success}, message='{res.message}'"
+        )
+
+        # ★ 여기서 AGV로 door_open 상태를 전달한다.
+        #    - success=True → 문 열림 성공 → door_open=True
+        #    - success=False → 문 열림 실패 → door_open=False 로 간주
+        door_open = bool(res.success)
+        self.pub_door_open.publish(Bool(data=door_open))
+        self.get_logger().info(
+            f"[AGV] /agv/door_open publish: {door_open} (from STM result)"
+        )
 
     # ─────────────────────────────────────────────
     #  RobotArm → AGV 서비스 브릿지

@@ -36,13 +36,6 @@ inline void to_flow_style_yaml(
   {
     out << "fence_open: ";
     rosidl_generator_traits::value_to_yaml(msg.fence_open, out);
-    out << ", ";
-  }
-
-  // member: door_open
-  {
-    out << "door_open: ";
-    rosidl_generator_traits::value_to_yaml(msg.door_open, out);
   }
   out << "}";
 }  // NOLINT(readability/fn_size)
@@ -68,16 +61,6 @@ inline void to_block_style_yaml(
     }
     out << "fence_open: ";
     rosidl_generator_traits::value_to_yaml(msg.fence_open, out);
-    out << "\n";
-  }
-
-  // member: door_open
-  {
-    if (indentation > 0) {
-      out << std::string(indentation, ' ');
-    }
-    out << "door_open: ";
-    rosidl_generator_traits::value_to_yaml(msg.door_open, out);
     out << "\n";
   }
 }  // NOLINT(readability/fn_size)

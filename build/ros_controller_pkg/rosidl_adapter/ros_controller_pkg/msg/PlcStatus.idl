@@ -9,8 +9,6 @@ module ros_controller_pkg {
       boolean is_empty;
 
       boolean fence_open;
-
-      boolean door_open;
     };
   };
 };

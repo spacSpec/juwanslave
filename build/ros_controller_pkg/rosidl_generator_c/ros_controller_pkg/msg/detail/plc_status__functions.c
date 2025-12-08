@@ -19,7 +19,6 @@ ros_controller_pkg__msg__PlcStatus__init(ros_controller_pkg__msg__PlcStatus * ms
   }
   // is_empty
   // fence_open
-  // door_open
   return true;
 }
 
@@ -31,7 +30,6 @@ ros_controller_pkg__msg__PlcStatus__fini(ros_controller_pkg__msg__PlcStatus * ms
   }
   // is_empty
   // fence_open
-  // door_open
 }
 
 bool
@@ -46,10 +44,6 @@ ros_controller_pkg__msg__PlcStatus__are_equal(const ros_controller_pkg__msg__Plc
   }
   // fence_open
   if (lhs->fence_open != rhs->fence_open) {
-    return false;
-  }
-  // door_open
-  if (lhs->door_open != rhs->door_open) {
     return false;
   }
   return true;
@@ -67,8 +61,6 @@ ros_controller_pkg__msg__PlcStatus__copy(
   output->is_empty = input->is_empty;
   // fence_open
   output->fence_open = input->fence_open;
-  // door_open
-  output->door_open = input->door_open;
   return true;
 }
 

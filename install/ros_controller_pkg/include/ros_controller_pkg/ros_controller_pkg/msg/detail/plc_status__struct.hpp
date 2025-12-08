@@ -41,7 +41,6 @@ struct PlcStatus_
     {
       this->is_empty = false;
       this->fence_open = false;
-      this->door_open = false;
     }
   }
 
@@ -53,7 +52,6 @@ struct PlcStatus_
     {
       this->is_empty = false;
       this->fence_open = false;
-      this->door_open = false;
     }
   }
 
@@ -64,9 +62,6 @@ struct PlcStatus_
   using _fence_open_type =
     bool;
   _fence_open_type fence_open;
-  using _door_open_type =
-    bool;
-  _door_open_type door_open;
 
   // setters for named parameter idiom
   Type & set__is_empty(
@@ -79,12 +74,6 @@ struct PlcStatus_
     const bool & _arg)
   {
     this->fence_open = _arg;
-    return *this;
-  }
-  Type & set__door_open(
-    const bool & _arg)
-  {
-    this->door_open = _arg;
     return *this;
   }
 
@@ -134,9 +123,6 @@ struct PlcStatus_
       return false;
     }
     if (this->fence_open != other.fence_open) {
-      return false;
-    }
-    if (this->door_open != other.door_open) {
       return false;
     }
     return true;

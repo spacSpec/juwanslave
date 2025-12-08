@@ -36,8 +36,6 @@ cdr_serialize(
   cdr << (ros_message.is_empty ? true : false);
   // Member: fence_open
   cdr << (ros_message.fence_open ? true : false);
-  // Member: door_open
-  cdr << (ros_message.door_open ? true : false);
   return true;
 }
 
@@ -59,13 +57,6 @@ cdr_deserialize(
     uint8_t tmp;
     cdr >> tmp;
     ros_message.fence_open = tmp ? true : false;
-  }
-
-  // Member: door_open
-  {
-    uint8_t tmp;
-    cdr >> tmp;
-    ros_message.door_open = tmp ? true : false;
   }
 
   return true;
@@ -93,12 +84,6 @@ get_serialized_size(
   // Member: fence_open
   {
     size_t item_size = sizeof(ros_message.fence_open);
-    current_alignment += item_size +
-      eprosima::fastcdr::Cdr::alignment(current_alignment, item_size);
-  }
-  // Member: door_open
-  {
-    size_t item_size = sizeof(ros_message.door_open);
     current_alignment += item_size +
       eprosima::fastcdr::Cdr::alignment(current_alignment, item_size);
   }
@@ -142,14 +127,6 @@ max_serialized_size_PlcStatus(
     current_alignment += array_size * sizeof(uint8_t);
   }
 
-  // Member: door_open
-  {
-    size_t array_size = 1;
-
-    last_member_size = array_size * sizeof(uint8_t);
-    current_alignment += array_size * sizeof(uint8_t);
-  }
-
   size_t ret_val = current_alignment - initial_alignment;
   if (is_plain) {
     // All members are plain, and type is not empty.
@@ -158,7 +135,7 @@ max_serialized_size_PlcStatus(
     using DataType = ros_controller_pkg::msg::PlcStatus;
     is_plain =
       (
-      offsetof(DataType, door_open) +
+      offsetof(DataType, fence_open) +
       last_member_size
       ) == ret_val;
   }

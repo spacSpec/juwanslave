@@ -37,7 +37,7 @@ void PlcStatus_fini_function(void * message_memory)
   typed_message->~PlcStatus();
 }
 
-static const ::rosidl_typesupport_introspection_cpp::MessageMember PlcStatus_message_member_array[3] = {
+static const ::rosidl_typesupport_introspection_cpp::MessageMember PlcStatus_message_member_array[2] = {
   {
     "is_empty",  // name
     ::rosidl_typesupport_introspection_cpp::ROS_TYPE_BOOLEAN,  // type
@@ -71,30 +71,13 @@ static const ::rosidl_typesupport_introspection_cpp::MessageMember PlcStatus_mes
     nullptr,  // fetch(index, &value) function pointer
     nullptr,  // assign(index, value) function pointer
     nullptr  // resize(index) function pointer
-  },
-  {
-    "door_open",  // name
-    ::rosidl_typesupport_introspection_cpp::ROS_TYPE_BOOLEAN,  // type
-    0,  // upper bound of string
-    nullptr,  // members of sub message
-    false,  // is array
-    0,  // array size
-    false,  // is upper bound
-    offsetof(ros_controller_pkg::msg::PlcStatus, door_open),  // bytes offset in struct
-    nullptr,  // default value
-    nullptr,  // size() function pointer
-    nullptr,  // get_const(index) function pointer
-    nullptr,  // get(index) function pointer
-    nullptr,  // fetch(index, &value) function pointer
-    nullptr,  // assign(index, value) function pointer
-    nullptr  // resize(index) function pointer
   }
 };
 
 static const ::rosidl_typesupport_introspection_cpp::MessageMembers PlcStatus_message_members = {
   "ros_controller_pkg::msg",  // message namespace
   "PlcStatus",  // message name
-  3,  // number of fields
+  2,  // number of fields
   sizeof(ros_controller_pkg::msg::PlcStatus),
   PlcStatus_message_member_array,  // message members
   PlcStatus_init_function,  // function to initialize message memory (memory has to be allocated)

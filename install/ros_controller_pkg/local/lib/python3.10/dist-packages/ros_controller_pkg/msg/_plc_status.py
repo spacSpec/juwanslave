@@ -57,17 +57,14 @@ class PlcStatus(metaclass=Metaclass_PlcStatus):
     __slots__ = [
         '_is_empty',
         '_fence_open',
-        '_door_open',
     ]
 
     _fields_and_field_types = {
         'is_empty': 'boolean',
         'fence_open': 'boolean',
-        'door_open': 'boolean',
     }
 
     SLOT_TYPES = (
-        rosidl_parser.definition.BasicType('boolean'),  # noqa: E501
         rosidl_parser.definition.BasicType('boolean'),  # noqa: E501
         rosidl_parser.definition.BasicType('boolean'),  # noqa: E501
     )
@@ -78,7 +75,6 @@ class PlcStatus(metaclass=Metaclass_PlcStatus):
             ', '.join(sorted(k for k in kwargs.keys() if '_' + k not in self.__slots__))
         self.is_empty = kwargs.get('is_empty', bool())
         self.fence_open = kwargs.get('fence_open', bool())
-        self.door_open = kwargs.get('door_open', bool())
 
     def __repr__(self):
         typename = self.__class__.__module__.split('.')
@@ -113,8 +109,6 @@ class PlcStatus(metaclass=Metaclass_PlcStatus):
             return False
         if self.fence_open != other.fence_open:
             return False
-        if self.door_open != other.door_open:
-            return False
         return True
 
     @classmethod
@@ -147,16 +141,3 @@ class PlcStatus(metaclass=Metaclass_PlcStatus):
                 isinstance(value, bool), \
                 "The 'fence_open' field must be of type 'bool'"
         self._fence_open = value
-
-    @builtins.property
-    def door_open(self):
-        """Message field 'door_open'."""
-        return self._door_open
-
-    @door_open.setter
-    def door_open(self, value):
-        if __debug__:
-            assert \
-                isinstance(value, bool), \
-                "The 'door_open' field must be of type 'bool'"
-        self._door_open = value

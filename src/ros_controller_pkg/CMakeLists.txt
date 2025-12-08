@@ -21,13 +21,21 @@ ament_export_dependencies(rosidl_default_runtime)
 
 # ─────────────────────────────────────────────
 # 2) 파이썬 노드 설치
-#    ros2 run ros_controller_pkg ros_controller
-#    → install/.../lib/ros_controller_pkg/ros_controller 실행
+#    ros2 run ros_controller_pkg ros_controller.py
+#    → install/.../lib/ros_controller_pkg/ros_controller.py 실행
 # ─────────────────────────────────────────────
 install(
   PROGRAMS
     ros_controller_pkg/ros_controller.py
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# ─────────────────────────────────────────────
+# 3) launch 파일 설치
+# ─────────────────────────────────────────────
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
 ament_package()

@@ -31,7 +31,7 @@ void ros_controller_pkg__msg__PlcStatus__rosidl_typesupport_introspection_c__Plc
   ros_controller_pkg__msg__PlcStatus__fini(message_memory);
 }
 
-static rosidl_typesupport_introspection_c__MessageMember ros_controller_pkg__msg__PlcStatus__rosidl_typesupport_introspection_c__PlcStatus_message_member_array[3] = {
+static rosidl_typesupport_introspection_c__MessageMember ros_controller_pkg__msg__PlcStatus__rosidl_typesupport_introspection_c__PlcStatus_message_member_array[2] = {
   {
     "is_empty",  // name
     rosidl_typesupport_introspection_c__ROS_TYPE_BOOLEAN,  // type
@@ -65,30 +65,13 @@ static rosidl_typesupport_introspection_c__MessageMember ros_controller_pkg__msg
     NULL,  // fetch(index, &value) function pointer
     NULL,  // assign(index, value) function pointer
     NULL  // resize(index) function pointer
-  },
-  {
-    "door_open",  // name
-    rosidl_typesupport_introspection_c__ROS_TYPE_BOOLEAN,  // type
-    0,  // upper bound of string
-    NULL,  // members of sub message
-    false,  // is array
-    0,  // array size
-    false,  // is upper bound
-    offsetof(ros_controller_pkg__msg__PlcStatus, door_open),  // bytes offset in struct
-    NULL,  // default value
-    NULL,  // size() function pointer
-    NULL,  // get_const(index) function pointer
-    NULL,  // get(index) function pointer
-    NULL,  // fetch(index, &value) function pointer
-    NULL,  // assign(index, value) function pointer
-    NULL  // resize(index) function pointer
   }
 };
 
 static const rosidl_typesupport_introspection_c__MessageMembers ros_controller_pkg__msg__PlcStatus__rosidl_typesupport_introspection_c__PlcStatus_message_members = {
   "ros_controller_pkg__msg",  // message namespace
   "PlcStatus",  // message name
-  3,  // number of fields
+  2,  // number of fields
   sizeof(ros_controller_pkg__msg__PlcStatus),
   ros_controller_pkg__msg__PlcStatus__rosidl_typesupport_introspection_c__PlcStatus_message_member_array,  // message members
   ros_controller_pkg__msg__PlcStatus__rosidl_typesupport_introspection_c__PlcStatus_init_function,  // function to initialize message memory (memory has to be allocated)

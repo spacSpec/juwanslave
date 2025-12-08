@@ -21,32 +21,16 @@ namespace msg
 namespace builder
 {
 
-class Init_PlcStatus_door_open
-{
-public:
-  explicit Init_PlcStatus_door_open(::ros_controller_pkg::msg::PlcStatus & msg)
-  : msg_(msg)
-  {}
-  ::ros_controller_pkg::msg::PlcStatus door_open(::ros_controller_pkg::msg::PlcStatus::_door_open_type arg)
-  {
-    msg_.door_open = std::move(arg);
-    return std::move(msg_);
-  }
-
-private:
-  ::ros_controller_pkg::msg::PlcStatus msg_;
-};
-
 class Init_PlcStatus_fence_open
 {
 public:
   explicit Init_PlcStatus_fence_open(::ros_controller_pkg::msg::PlcStatus & msg)
   : msg_(msg)
   {}
-  Init_PlcStatus_door_open fence_open(::ros_controller_pkg::msg::PlcStatus::_fence_open_type arg)
+  ::ros_controller_pkg::msg::PlcStatus fence_open(::ros_controller_pkg::msg::PlcStatus::_fence_open_type arg)
   {
     msg_.fence_open = std::move(arg);
-    return Init_PlcStatus_door_open(msg_);
+    return std::move(msg_);
   }
 
 private:
