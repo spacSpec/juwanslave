@@ -1,0 +1,42 @@
+[0.000000] (-) TimerEvent: {}
+[0.000234] (plc_interface) JobQueued: {'identifier': 'plc_interface', 'dependencies': OrderedDict()}
+[0.000294] (ros_controller_pkg) JobQueued: {'identifier': 'ros_controller_pkg', 'dependencies': OrderedDict()}
+[0.000326] (stm_controller) JobQueued: {'identifier': 'stm_controller', 'dependencies': OrderedDict()}
+[0.000352] (plc_interface) JobStarted: {'identifier': 'plc_interface'}
+[0.006361] (ros_controller_pkg) JobStarted: {'identifier': 'ros_controller_pkg'}
+[0.008380] (stm_controller) JobStarted: {'identifier': 'stm_controller'}
+[0.099272] (-) TimerEvent: {}
+[0.176279] (ros_controller_pkg) JobProgress: {'identifier': 'ros_controller_pkg', 'progress': 'cmake'}
+[0.177948] (ros_controller_pkg) JobProgress: {'identifier': 'ros_controller_pkg', 'progress': 'build'}
+[0.178019] (ros_controller_pkg) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/taehwan/ros2_ws/build/ros_controller_pkg', '--', '-j12', '-l12'], 'cwd': '/home/taehwan/ros2_ws/build/ros_controller_pkg', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'taehwan'), ('LC_TIME', 'ko_KR.UTF-8'), ('XDG_SESSION_TYPE', 'x11'), ('SHLVL', '1'), ('HOME', '/home/taehwan'), ('DESKTOP_SESSION', 'ubuntu'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/terminator.desktop'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('LC_MONETARY', 'ko_KR.UTF-8'), ('MANAGERPID', '1586'), ('SYSTEMD_EXEC_PID', '2019'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('TERMINATOR_DBUS_NAME', 'net.tenshu.Terminator23558193cd9818af7fe4d2c2f5bd9d00f'), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '4282'), ('GTK_IM_MODULE', 'ibus'), ('LOGNAME', 'taehwan'), ('JOURNAL_STREAM', '8:17775'), ('_', '/usr/bin/colcon'), ('XDG_SESSION_CLASS', 'user'), ('USERNAME', 'taehwan'), ('TERM', 'xterm-256color'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('WINDOWPATH', '2'), ('PATH', '/home/taehwan/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin'), ('SESSION_MANAGER', 'local/taehwan-HP-ProBook-450-15-6-inch-G10-Notebook-PC:@/tmp/.ICE-unix/1966,unix/taehwan-HP-ProBook-450-15-6-inch-G10-Notebook-PC:/tmp/.ICE-unix/1966'), ('INVOCATION_ID', '721fb41547534238bdbcf4bbcb389b87'), ('XDG_MENU_PREFIX', 'gnome-'), ('LC_ADDRESS', 'ko_KR.UTF-8'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('DISPLAY', ':1'), ('TERMINATOR_DBUS_PATH', '/net/tenshu/Terminator2'), ('LANG', 'en_US.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('IBUS_DISABLE_SNOOPER', '1'), ('LC_TELEPHONE', 'ko_KR.UTF-8'), ('XMODIFIERS', '@im=ibus'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/gdm/Xauthority'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('SHELL', '/bin/bash'), ('LC_NAME', 'ko_KR.UTF-8'), ('TERMINATOR_UUID', 'urn:uuid:208307d6-6ee7-4c5e-a9bd-dfb96803d946'), ('QT_ACCESSIBILITY', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('LC_MEASUREMENT', 'ko_KR.UTF-8'), ('GPG_AGENT_INFO', '/run/user/1000/gnupg/S.gpg-agent:0:1'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('LC_IDENTIFICATION', 'ko_KR.UTF-8'), ('QT_IM_MODULE', 'ibus'), ('PWD', '/home/taehwan/ros2_ws/build/ros_controller_pkg'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('LC_NUMERIC', 'ko_KR.UTF-8'), ('LC_PAPER', 'ko_KR.UTF-8'), ('COLCON', '1'), ('VTE_VERSION', '6800')]), 'shell': False}
+[0.199434] (-) TimerEvent: {}
+[0.281419] (ros_controller_pkg) StdoutLine: {'line': b'-- Found ament_cmake: 1.3.12 (/home/taehwan/ros2_humble/install/ament_cmake/share/ament_cmake/cmake)\n'}
+[0.299563] (-) TimerEvent: {}
+[0.400024] (-) TimerEvent: {}
+[0.443804] (ros_controller_pkg) StderrLine: {'line': b'Traceback (most recent call last):\n'}
+[0.444069] (ros_controller_pkg) StderrLine: {'line': b'  File "/home/taehwan/ros2_humble/install/ament_cmake_core/share/ament_cmake_core/cmake/package_templates/templates_2_cmake.py", line 21, in <module>\n'}
+[0.444186] (ros_controller_pkg) StderrLine: {'line': b'    from ament_package.templates import get_environment_hook_template_path\n'}
+[0.444290] (ros_controller_pkg) StderrLine: {'line': b"ModuleNotFoundError: No module named 'ament_package'\n"}
+[0.455868] (ros_controller_pkg) StderrLine: {'line': b'\x1b[31mCMake Error at /home/taehwan/ros2_humble/install/ament_cmake_core/share/ament_cmake_core/cmake/ament_cmake_package_templates-extras.cmake:41 (message):\n'}
+[0.456126] (ros_controller_pkg) StderrLine: {'line': b'  execute_process(/usr/bin/python3\n'}
+[0.456256] (ros_controller_pkg) StderrLine: {'line': b'  /home/taehwan/ros2_humble/install/ament_cmake_core/share/ament_cmake_core/cmake/package_templates/templates_2_cmake.py\n'}
+[0.456373] (ros_controller_pkg) StderrLine: {'line': b'  /home/taehwan/ros2_ws/build/ros_controller_pkg/ament_cmake_package_templates/templates.cmake)\n'}
+[0.456486] (ros_controller_pkg) StderrLine: {'line': b'  returned error code 1\n'}
+[0.456857] (ros_controller_pkg) StderrLine: {'line': b'Call Stack (most recent call first):\n'}
+[0.456992] (ros_controller_pkg) StderrLine: {'line': b'  /home/taehwan/ros2_humble/install/ament_cmake_core/share/ament_cmake_core/cmake/ament_cmake_coreConfig.cmake:41 (include)\n'}
+[0.457110] (ros_controller_pkg) StderrLine: {'line': b'  /home/taehwan/ros2_humble/install/ament_cmake/share/ament_cmake/cmake/ament_cmake_export_dependencies-extras.cmake:15 (find_package)\n'}
+[0.457221] (ros_controller_pkg) StderrLine: {'line': b'  /home/taehwan/ros2_humble/install/ament_cmake/share/ament_cmake/cmake/ament_cmakeConfig.cmake:41 (include)\n'}
+[0.457324] (ros_controller_pkg) StderrLine: {'line': b'  CMakeLists.txt:5 (find_package)\n'}
+[0.457427] (ros_controller_pkg) StderrLine: {'line': b'\n'}
+[0.457536] (ros_controller_pkg) StderrLine: {'line': b'\x1b[0m\n'}
+[0.457658] (ros_controller_pkg) StdoutLine: {'line': b'-- Configuring incomplete, errors occurred!\n'}
+[0.457776] (ros_controller_pkg) StdoutLine: {'line': b'See also "/home/taehwan/ros2_ws/build/ros_controller_pkg/CMakeFiles/CMakeOutput.log".\n'}
+[0.458972] (ros_controller_pkg) StderrLine: {'line': b'gmake: *** [Makefile:747: cmake_check_build_system] Error 1\n'}
+[0.462099] (ros_controller_pkg) CommandEnded: {'returncode': 2}
+[0.498569] (ros_controller_pkg) JobEnded: {'identifier': 'ros_controller_pkg', 'rc': 2}
+[0.500290] (-) TimerEvent: {}
+[0.600817] (-) TimerEvent: {}
+[0.701335] (-) TimerEvent: {}
+[0.736646] (plc_interface) JobEnded: {'identifier': 'plc_interface', 'rc': 'SIGINT'}
+[0.737203] (stm_controller) JobEnded: {'identifier': 'stm_controller', 'rc': 'SIGINT'}
+[0.747311] (-) EventReactorShutdown: {}

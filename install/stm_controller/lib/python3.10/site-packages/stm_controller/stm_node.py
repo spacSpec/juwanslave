@@ -4,7 +4,7 @@ from std_srvs.srv import SetBool
 import socket
 import time
 
-ESP32_IP = "172.30.1.45"  # << 반드시 너의 ESP32 IP로 수정
+ESP32_IP = "172.30.1.46"  # << 반드시 너의 ESP32 IP로 수정
 ESP32_PORT = 5000
 
 
