@@ -1,0 +1,123 @@
+#include "Wire.h"
+#include "I2Cdev.h"
+#include "MPU9250.h"
+
+MPU9250 accelgyro(0x69);
+I2Cdev I2C_M;
+
+uint8_t buffer_m[7];
+
+int16_t mx, my, mz;
+float heading;
+float headingFiltered = 0.0f;
+
+float Mxyz[3];
+
+static float mx_centre = 0;
+static float my_centre = 0;
+static float mz_centre = 0;
+
+const float HEADING_ALPHA = 0.15f;
+
+float smoothAngle(float prev, float current, float alpha)
+{
+    float diff = current - prev;
+
+    if (diff > 180.0f)  diff -= 360.0f;
+    if (diff < -180.0f) diff += 360.0f;
+
+    float out = prev + alpha * diff;
+
+    if (out < 0.0f) out += 360.0f;
+    if (out >= 360.0f) out -= 360.0f;
+
+    return out;
+}
+
+void initMagContinuous()
+{
+    // ✅ MPU9250 내부 I2C Master 끄고, 외부에서 자력계 직접 접근 가능하게
+    accelgyro.setI2CMasterModeEnabled(false);
+    accelgyro.setI2CBypassEnabled(true);
+    delay(10);
+
+    // ✅ AK8963 Soft Reset (0x0B)
+    I2C_M.writeByte(MPU9150_RA_MAG_ADDRESS, 0x0B, 0x01);
+    delay(10);
+
+    // Power-down
+    I2C_M.writeByte(MPU9150_RA_MAG_ADDRESS, 0x0A, 0x00);
+    delay(10);
+
+    // 16-bit + Continuous measurement mode 2 (100Hz)
+    I2C_M.writeByte(MPU9150_RA_MAG_ADDRESS, 0x0A, 0x16);
+    delay(10);
+}
+
+bool getCompass_Data()
+{
+    uint8_t st1 = 0;
+    I2C_M.readByte(MPU9150_RA_MAG_ADDRESS, 0x02, &st1);
+
+    // ✅ 데이터 준비 안 됐으면 이전값 유지
+    if (!(st1 & 0x01)) return false;
+
+    // ✅ X/Y/Z + ST2까지 7바이트 읽기
+    I2C_M.readBytes(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_XOUT_L, 7, buffer_m);
+
+    mx = ((int16_t)buffer_m[1] << 8) | buffer_m[0];
+    my = ((int16_t)buffer_m[3] << 8) | buffer_m[2];
+    mz = ((int16_t)buffer_m[5] << 8) | buffer_m[4];
+
+    uint8_t st2 = buffer_m[6];
+
+    // ✅ 오버플로우면 무시
+    if (st2 & 0x08) return false;
+
+    Mxyz[0] = (float)mx - mx_centre;
+    Mxyz[1] = (float)my - my_centre;
+    Mxyz[2] = (float)mz - mz_centre;
+
+    return true;
+}
+
+void getHeading()
+{
+    heading = 180.0f * atan2(Mxyz[1], Mxyz[0]) / PI;
+    if (heading < 0) heading += 360.0f;
+}
+
+void setup()
+{
+    Wire.begin();
+    Serial.begin(38400);
+
+    Serial.println("Initializing I2C devices...");
+    accelgyro.initialize();
+
+    Serial.println("Testing device connections...");
+    Serial.println(accelgyro.testConnection() ? "MPU9250 connection successful"
+                                              : "MPU9250 connection failed");
+
+    delay(200);
+
+    initMagContinuous();
+
+    // 초기값 세팅
+    getCompass_Data();
+    getHeading();
+    headingFiltered = heading;
+}
+
+void loop()
+{
+    if (getCompass_Data()) {
+        getHeading();
+        headingFiltered = smoothAngle(headingFiltered, heading, HEADING_ALPHA);
+    }
+
+    Serial.print("heading: ");
+    Serial.println(headingFiltered);
+
+    delay(20); // 100Hz에 좀 더 맞춰줌
+}
