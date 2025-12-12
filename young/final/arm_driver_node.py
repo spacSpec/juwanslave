@@ -1,200 +1,205 @@
 import rclpy
 from rclpy.node import Node
 from my_robot_interfaces.srv import ArmCommand
-from pymycobot.mycobot import MyCobot
-import threading
+from pymycobot.mycobot320 import MyCobot320 
+import threading # [수정] 락(Lock) 기능을 위해 필요
 import time
 import math
 
 # ===================== [설정] =====================
 PORT = '/dev/ttyACM0'
 BAUD = 115200
-speed = 40  # 속도를 조금 높임 (테스트 후 조절)
+speed = 30 
 high = 315
-# 1. 홈 위치 (관절 각도: 안전한 대기 자세, 그리퍼가 정면/위를 봐도 상관없음)
-POSE_WAIT = [0, 0, 0, 0, 90, 0]
-
-# 2. 집기 접근 자세 (좌표 RPY: 그리퍼가 바닥을 수직으로 보는 자세) 
-# 산업 현장 용어: End-Effector Orientation Constraint (말단 자세 구속)
-# 로봇이 어디에 있든(XY가 변하든) 그리퍼 바닥면은 항상 땅을 보게(-175도) 고정합니다.
-# [Rx, Ry, Rz]
-PICK_ORIENTATION = [-180, -10, 0] 
-
-# 3. 박스 적재 시작 위치 (좌표: X, Y, Z, Rx, Ry, Rz)
-BOX_BASE_POSE =  [237.1, -1.6, 146.3, -173.09, 2.86, -91.76]
-
-# 적재 간격
-BOX_OFFSET_X = 60.0 
+POSE_WAIT =[-91.4, 2.81, 6.85, 75.05, -89.03, 0.43]
+PICK_ORIENTATION = [-180, 0, 0] 
+BOX_BASE_POSE =  [-182.5, -29.1, 192.4, -163.96, 1.95, 85.04]
+BOX_OFFSET_X = -60.0 
 
 class ArmDriverNode(Node):
     def __init__(self):
         super().__init__('arm_driver_node')
         try:
-            self.mc = MyCobot(PORT, BAUD)
+            self.mc = MyCobot320(PORT, BAUD)
             time.sleep(0.5)
             self.mc.power_on()
             time.sleep(0.5)
-            self.get_logger().info(f'✅ MyCobot Connected on {PORT}')
+            self.get_logger().info(f'✅ MyCobot320 Connected on {PORT}')
         except Exception as e:
             self.get_logger().error(f'❌ Connection Failed: {e}')
             return
 
+        # [수정 1] 뮤텍스(Lock) 생성
+        # 화장실 열쇠를 하나 만듭니다. 누군가 이 열쇠를 가지고 작업 중이면
+        # 다른 명령은 밖에서 줄 서서 기다려야 합니다.
+        self.mutex = threading.Lock()
+
         self.srv = self.create_service(ArmCommand, '/arm/execute_cmd', self.handle_command)
+        
         self.pack_count = 0
+        self.mc.set_color(0, 255, 0)
         
-        self.mc.set_color(0, 255, 0) # 초록 (대기)
-        
-        # 초기 위치 이동
-        self.mc.send_angles(POSE_WAIT, speed)
-        self.wait_for_robot_stop()
+        self.init_gripper_sequence()
+
+    def init_gripper_sequence(self):
+        try:
+            self.get_logger().info("🔧 Initializing Gripper...")
+            self.mc.set_gripper_mode(0)
+            self.mc.init_electric_gripper()
+            time.sleep(1.0)
+            self.get_logger().info("✅ Gripper Initialized")
+        except Exception as e:
+            self.get_logger().error(f"⚠️ Gripper Init Warning: {e}")
 
     def wait_for_robot_stop(self, pos_tol=5.0, stable_time=0.2, timeout=10):
+        """
+        로봇이 목표 지점에 도달할 때까지 대기
+        """
+        # [수정 2] 출발 지연 대기 (매우 중요!)
+        # 명령을 보내자마자 이 함수가 호출되면, 로봇이 아직 움직이기 시작도 안 해서
+        # diff가 0이 되어 "도착했다"고 착각하고 함수가 바로 끝나버립니다.
+        # 로봇이 반응하고 움직일 시간을 0.2초 정도 줍니다.
+        time.sleep(0.2) 
+
         start = time.time()
         still_since = None
         last = self.mc.get_coords()
         
         while time.time() - start < timeout:
-            time.sleep(0.1)
+            time.sleep(0.1) 
             now = self.mc.get_coords()
             if not now or not last: continue
             
             diff = max(abs(n - l) for n, l in zip(now, last))
+            
             if diff < pos_tol:
                 if still_since is None: still_since = time.time()
                 elif time.time() - still_since > stable_time:
                     return 
             else:
-                still_since = None
-            last = now
-        self.get_logger().warn("⚠️ Motion Timeout")
+                still_since = None 
+            last = now 
+            
+        self.get_logger().warn("⚠️ Motion Timeout") 
 
     def handle_command(self, request, response):
-        command = request.command
-        target = request.target_coord 
-        
-        self.get_logger().info(f"Command: {command}, Target: {target}")
-        self.mc.set_color(0, 0, 255) # 파란색 (작업 중)
+        # [수정 3] 뮤텍스(Lock) 걸기 - 동기화의 핵심
+        # 이 블록(with) 안에 들어오면 '열쇠'를 잠급니다.
+        # 앞선 명령이 끝나서 이 블록을 나가기 전까지, 뒷 명령은 여기서 멈춰 기다립니다.
+        with self.mutex:
+            command = request.command
+            target = request.target_coord 
+            
+            self.get_logger().info(f"Command Received: {command}") # 로그 수정
+            self.mc.set_color(0, 0, 255) 
 
-        try:
-            if command == "home":
-                self.get_logger().info("🏠 Moving to WAIT Position...")
-                self.mc.send_angles(POSE_WAIT, speed)
-                self.wait_for_robot_stop()
+            try:
+                if command == "home":
+                    self.get_logger().info("🏠 Moving to WAIT Position...")
+                    self.mc.send_angles(POSE_WAIT, speed)
+                    self.wait_for_robot_stop()
+                    
+                    self.init_gripper_sequence()
+                    self.mc.set_gripper_value(100, 20, 1) 
+                    self.wait_for_robot_stop()
+
+                    self.mc.set_color(0, 255, 0)
+                    response.success = True
+                    response.message = "Robot Ready (WAIT)"
+                    # return response (여기서 리턴하지 않고 맨 아래에서 통합 리턴)
+
+                elif command == "pick_good":
+                    x, y, angle = target[0], target[1], target[2]
+                    self.get_logger().info(f"🚀 Processing Pick: {x}, {y}")
+
+                    # 1. 이동
+                    target_pose = [x, y, high+30, *PICK_ORIENTATION] 
+                    self.mc.send_coords(target_pose, speed, 0)
+                    self.wait_for_robot_stop()
+
+                    # 2. 회전 보정
+                    current_angles = self.mc.get_angles()
+                    if current_angles:
+                        target_j6 = angle - 90
+                        while target_j6 > 90: target_j6 -= 90
+                        while target_j6 < -90: target_j6 += 90
+                        if target_j6 > 170: target_j6 = 170
+                        if target_j6 < -170: target_j6 = -170
+                        
+                        current_angles[5] = target_j6
+                        self.mc.send_angles(current_angles, speed)
+                        self.wait_for_robot_stop()
+                        
+                   # 3. 하강 [수정됨]
+                    cur_coords = self.mc.get_coords()
+                    # ★ 중요: 여기도 리스트인지 확인!
+                    if cur_coords and isinstance(cur_coords, list):
+                        cur_coords[2] = high 
+                        self.mc.send_coords(cur_coords, speed, 0)
+                        self.wait_for_robot_stop()
+                    else:
+                        self.get_logger().warn("⚠️ Failed to get coords, Skipping descent.")
+                        
+                    # 4. 잡기
+                    self.mc.set_gripper_value(40, 20, 1)
+                    time.sleep(1.5) # 그리퍼 동작은 좌표 변화가 없으니 시간으로 대기
+
+                    # 5. 상승
+                    cur_coords = self.mc.get_coords()
+                    if cur_coords:
+                        cur_coords[2] = high+30
+                        self.mc.send_coords(cur_coords, speed, 0)
+                        self.wait_for_robot_stop()
+
+                    # 6. 적재
+                    final_place_pose = list(BOX_BASE_POSE) 
+                    final_place_pose[0] = BOX_BASE_POSE[0] + (self.pack_count * BOX_OFFSET_X)
+                    
+                    up_pose = list(final_place_pose)
+                    up_pose[2] += 100 
+                    self.mc.send_coords(up_pose, speed, 0)
+                    self.wait_for_robot_stop()
+                    
+                    self.mc.send_coords(final_place_pose, speed, 0)
+                    self.wait_for_robot_stop()
+                    
+                    self.mc.set_gripper_value(100, 20, 1) 
+                    time.sleep(1.0)
+                    
+                    self.mc.send_coords(up_pose, speed, 0)
+                    self.wait_for_robot_stop()
+
+                    self.pack_count += 1
+                    if self.pack_count >= 3:
+                        self.pack_count = 0 
+
+                    # 홈 복귀
+                    self.mc.send_angles(POSE_WAIT, speed)
+                    self.wait_for_robot_stop()
+
+                    response.success = True
+                    response.message = f"Done (Count: {self.pack_count})"
+
+                elif command == "discard_bad":
+                    # [추가] 불량 처리 로직이 비어있으면 너무 빨리 끝나서 문제될 수 있음
+                    # 필요하다면 여기에 동작 추가
+                    response.success = True
+                    response.message = "Discarded"
                 
-                # 그리퍼 초기화
-                self.mc.set_gripper_mode(0)
-                self.mc.init_electric_gripper()
-                time.sleep(1)
-                self.mc.set_gripper_value(100, 30, 1) # 열기
-                time.sleep(1.0)
-
                 self.mc.set_color(0, 255, 0)
-                response.success = True
-                response.message = "Robot Ready (WAIT)"
-                return response
 
-            if command == "pick_good":
-                x, y, angle = target[0], target[1], target[2]
-                
-                # [산업 현장 방식: Decoupled Motion]
-                # 1단계: 위치(XY) 이동 - 자세(RPY)는 바닥보기로 고정 (물체 회전 무시하고 일단 접근)
-                self.get_logger().info(f"🚀 Moving to XY: {x}, {y} with DOWN orientation")
-                
-                # Z높이는 안전하게 유지, RPY는 바닥을 보게 고정(PICK_ORIENTATION)
-                # 이렇게 하면 로봇이 XY 어디로 가든 그리퍼는 항상 수직 아래를 봅니다.
-                target_pose = [x, y, high+30, *PICK_ORIENTATION] 
-                self.mc.send_coords(target_pose, speed, 0)
-                self.wait_for_robot_stop()
-
-                # 2단계: 회전(Yaw) 보정 - 위치는 고정하고 손목(J6)만 돌림
-                # 이것이 '물체에 맞춰 RPY를 변경'하는 과정입니다.
-                # 2단계: 회전(Yaw) 보정
-                current_angles = self.mc.get_angles()
-                if current_angles:
-                    # [안전 장치] J6가 너무 많이 돌아가 있으면 0으로 풀고 다시 계산
-                    # 하지만 위에서 PICK_ORIENTATION(Rz=0)으로 이동했으므로 J6는 0 근처일 것입니다.
-                    
-                    # [중요] 카메라 각도 부호 확인 필요 (테스트 해보고 반대로 돌면 -= 로 변경)
-                    target_j6 = current_angles[5] + angle 
-
-                    # [안전 장치] MyCobot J6 한계 보호 (-170 ~ 170)
-                    if target_j6 > 170: target_j6 = 170
-                    if target_j6 < -170: target_j6 = -170
-                    
-                    current_angles[5] = target_j6
-                    self.mc.send_angles(current_angles, speed)
-                    self.wait_for_robot_stop()
-                    
-                # 3. 하강 (Z=315 근처, 물체 잡는 높이)
-                # 좌표 기반으로 Z축만 내립니다.
-                cur_coords = self.mc.get_coords()
-                if cur_coords:
-                    cur_coords[2] = high # 물체 높이에 맞춰 수정 필요
-                    self.mc.send_coords(cur_coords, speed, 0)
-                    self.wait_for_robot_stop()
-
-                # 4. 잡기 (Grip)
-                self.mc.set_gripper_value(45, 30, 1) # 꽉 잡기
-                time.sleep(1.5)
-
-                # 5. 상승 (Z=290 복귀)
-                cur_coords = self.mc.get_coords()
-                if cur_coords:
-                    cur_coords[2] = high+30
-                    self.mc.send_coords(cur_coords, speed, 0)
-                    self.wait_for_robot_stop()
-
-                # 6. 박스 적재 (Pick & Place)
-                # 적재 위치 계산 (X축으로 오프셋 적용)
-                final_place_pose = list(BOX_BASE_POSE) # 복사해서 사용
-                final_place_pose[0] = BOX_BASE_POSE[0] + (self.pack_count * BOX_OFFSET_X)
-                
-                # 6-1. 적재 위치 '위'로 이동 (충돌 방지, Z+50)
-                up_pose = list(final_place_pose)
-                up_pose[2] += 100 
-                self.mc.send_coords(up_pose, speed, 0)
-                self.wait_for_robot_stop()
-                
-                # 6-2. 내려놓기 (원래 높이)
-                self.mc.send_coords(final_place_pose, speed, 0)
-                self.wait_for_robot_stop()
-                
-                # 6-3. 놓기 (Open)
-                self.mc.set_gripper_value(90, 30, 1)
-                time.sleep(1.0)
-                
-                # 6-4. 복귀 상승 (다시 위로)
-                self.mc.send_coords(up_pose, speed, 0)
-                self.wait_for_robot_stop()
-
-                # 카운트 관리
-                self.pack_count += 1
-                if self.pack_count >= 3:
-                    self.pack_count = 0 
-
-                # 홈 복귀 (다시 안전한 관절 각도로)
-                self.mc.send_angles(POSE_WAIT, speed)
-                self.wait_for_robot_stop()
-
-                response.success = True
-                response.message = f"Pick & Place Done (Count: {self.pack_count})"
-
-            elif command == "discard_bad":
-                self.mc.set_gripper_value(100, 30, 1)
-                time.sleep(1.0)
-                response.success = True
-                response.message = "Discarded"
+            except Exception as e:
+                self.mc.set_color(255, 0, 0)
+                response.success = False
+                response.message = str(e)
+                self.get_logger().error(f"Execution Error: {e}")
             
-            self.mc.set_color(0, 255, 0)
+            # [수정 4] Lock 범위 안에서 리턴
+            # 여기까지 와야 with self.mutex 블록이 끝나고 열쇠가 반납됩니다.
+            # 그래야 대기하던 다음 명령이 들어올 수 있습니다.
+            return response
 
-        except Exception as e:
-            self.mc.set_color(255, 0, 0)
-            response.success = False
-            response.message = str(e)
-            self.get_logger().error(f"Execution Error: {e}")
             
-        return response
-
 def main(args=None):
     rclpy.init(args=args)
     node = ArmDriverNode()
@@ -207,3 +212,6 @@ def main(args=None):
             node.mc.stop()
         node.destroy_node()
         rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
