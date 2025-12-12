@@ -101,7 +101,10 @@ class TaskManagerNode(Node):
         response.message = quality
         
         # 3. 로봇 팔 명령 전송
+<<<<<<< HEAD
         
+=======
+>>>>>>> 06a4774a53493e4e80f73cabae9bb15bb7549871
         if quality == "GOOD":
             self.get_logger().info(f"🟢 Action: Pick Item ({quality})")
             
@@ -155,6 +158,7 @@ class TaskManagerNode(Node):
     def arm_done_callback(self, future):
         try:
             result = future.result()
+<<<<<<< HEAD
             
             # -----------------------------------------------------------
             # [수정됨] 강제 성공 처리 모드
@@ -187,6 +191,27 @@ class TaskManagerNode(Node):
                     
         except Exception as e:
             self.get_logger().error(f"❌ Callback Error: {e}")
+=======
+            if result.success and "Pick" in result.message:
+                self.box_item_count += 1
+                self.total_count += 1
+                
+                # 카운트 발행
+                msg = Int32()
+                msg.data = self.total_count
+                self.count_pub.publish(msg)
+                
+                self.get_logger().info(f"📦 Count: {self.box_item_count}/3")
+
+                # 박스 만재 시 AGV 호출
+                if self.box_item_count >= 1:
+                    self.get_logger().warn("🛑 Box Full! Pausing Robot & Calling AGV...")
+                    self.is_waiting_agv = True  # 빨간불 켜기! (이제부터 작업 요청 거부)
+                    self.control_agv(enable=True) # AGV 호출
+                    
+        except Exception as e:
+            self.get_logger().error(f"❌ Arm Error: {e}")
+>>>>>>> 06a4774a53493e4e80f73cabae9bb15bb7549871
 
     def control_agv(self, enable: bool):
         """
