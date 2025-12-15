@@ -1,0 +1,8 @@
+prefix=/home/vboxuser/myagv_ros/devel
+
+Name: laser_scan_matcher
+Description: Description of laser_scan_matcher
+Version: 0.3.2
+Cflags: -I/home/vboxuser/myagv_ros/src/scan_tools/laser_scan_matcher/include
+Libs: -L${prefix}/lib -llaser_scan_matcher
+Requires: roscpp nodelet sensor_msgs tf pcl_ros pcl_conversions geometry_msgs nav_msgs

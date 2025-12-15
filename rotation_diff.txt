@@ -1,0 +1,2 @@
+start_yaw_rad=0.3633, end_yaw_rad=1.8410
+diff_rad=1.4777, diff_deg=84.67

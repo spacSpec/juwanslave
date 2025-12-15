@@ -1,0 +1,8 @@
+prefix=/home/vboxuser/myagv_ros/install
+
+Name: agv_task_manager
+Description: Description of agv_task_manager
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 
