@@ -9,6 +9,7 @@ setup.py
 ../../build/plc_interface/plc_interface.egg-info/top_level.txt
 ../../build/plc_interface/plc_interface.egg-info/zip-safe
 plc_interface/__init__.py
+plc_interface/db.py
 plc_interface/plc_node.py
 resource/plc_interface
 test/test_copyright.py

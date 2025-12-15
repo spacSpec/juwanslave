@@ -4,7 +4,7 @@
 import rclpy
 from rclpy.node import Node
 
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, Int32          # ← Int32 추가!
 from std_srvs.srv import SetBool, Trigger
 
 from ros_controller_pkg.msg import PlcStatus
@@ -15,6 +15,23 @@ class RosController(Node):
         super().__init__('ros_controller')
 
         self.get_logger().info("ROS Controller Started.")
+
+        # ─────────────────────────────────────────────
+        # 0) 양품 / 불량 카운트 변수 & 퍼블리셔
+        # ─────────────────────────────────────────────
+        self.good_count = 0
+        self.bad_count = 0
+
+        self.pub_good_count = self.create_publisher(
+            Int32,
+            '/ros_controller/good_count',
+            10
+        )
+        self.pub_bad_count = self.create_publisher(
+            Int32,
+            '/ros_controller/bad_count',
+            10
+        )
 
         # ─────────────────────────────────────────────
         # 1) PLC → ros_controller (통합 상태 /plc/status_ros)
@@ -29,7 +46,6 @@ class RosController(Node):
         # ─────────────────────────────────────────────
         # 2) PLC(M0) → ros_controller (topic)
         #    ros_controller → STM (service)
-        #    /plc/door_state (Bool topic) → /plc/door_state (SetBool service)
         # ─────────────────────────────────────────────
         self.create_subscription(
             Bool,
@@ -38,7 +54,6 @@ class RosController(Node):
             10
         )
 
-        # STM 쪽 SetBool 서비스 클라이언트 (/plc/door_state)
         self.stm_door_client = self.create_client(SetBool, '/plc/door_state')
         if not self.stm_door_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn(
@@ -47,7 +62,6 @@ class RosController(Node):
 
         # ─────────────────────────────────────────────
         # 3) ros_controller → AGV (publish)
-        #    ⚠ door_open 은 이제 PLC가 아니라 STM 결과로만 퍼블리시함
         # ─────────────────────────────────────────────
         self.pub_empty = self.create_publisher(Bool, '/agv/is_empty', 10)
         self.pub_fence_open = self.create_publisher(Bool, '/agv/fence_open', 10)
@@ -55,7 +69,6 @@ class RosController(Node):
 
         # ─────────────────────────────────────────────
         # 4) ros_controller → RobotArm (publish)
-        #    - fence_open 상태 공유
         # ─────────────────────────────────────────────
         self.pub_robotarm_fence_open = self.create_publisher(
             Bool,
@@ -66,7 +79,6 @@ class RosController(Node):
         # ─────────────────────────────────────────────
         # 5) RobotArm → ros_controller (service server)
         #    ros_controller → AGV (service client)
-        #    /ros_controller/request_dispatch <-> /agv/request_dispatch
         # ─────────────────────────────────────────────
         self.srv_request_dispatch = self.create_service(
             SetBool,
@@ -81,7 +93,6 @@ class RosController(Node):
         # ─────────────────────────────────────────────
         # 6) PLC → ros_controller (service server, SetBool)
         #    ros_controller → RobotArm (service client, Trigger)
-        #    /plc/robotarm_detect <-> /robot_arm/detect
         # ─────────────────────────────────────────────
         self.srv_plc_robotarm_detect = self.create_service(
             SetBool,
@@ -100,45 +111,26 @@ class RosController(Node):
     #  PLC 통합 상태 콜백 (/plc/status_ros)
     # ─────────────────────────────────────────────
     def cb_plc_status(self, msg: PlcStatus):
-        """
-        PLC에서 온 /plc/status_ros(PlcStatus)를 받아서
-        AGV와 RobotArm 쪽으로 각각 필요한 토픽을 퍼블리시.
-
-        ⚠ PlcStatus.msg 에서 door_open 필드를 제거했으므로
-          여기서는 is_empty, fence_open 만 사용한다.
-        """
-
         # AGV로 전달 (is_empty, fence_open만)
         self.pub_empty.publish(Bool(data=msg.is_empty))
         self.pub_fence_open.publish(Bool(data=msg.fence_open))
-        # self.pub_door_open.publish(Bool(data=msg.door_open))  # ← 더 이상 사용 안 함
 
         # RobotArm 쪽에도 fence_open 공유
         self.pub_robotarm_fence_open.publish(Bool(data=msg.fence_open))
 
-        # 로그도 door_open 없이 찍기
         self.get_logger().info(
             f"[PLC STATUS] empty={msg.is_empty}, fence_open={msg.fence_open}"
         )
 
     # ─────────────────────────────────────────────
     #  PLC(M0) door_state 토픽 → STM SetBool 서비스 브릿지
-    #    그리고 STM 결과로만 /agv/door_open 을 퍼블리시
     # ─────────────────────────────────────────────
     def cb_plc_door_state(self, msg: Bool):
-        """
-        plc_node가 /plc/door_state (Bool)를 publish 하면
-        ros_controller가 /plc/door_state (SetBool) 서비스를 STM에게 호출해줌.
-
-        - msg.data == True  → 문 열어달라는 명령으로 해석 → 서비스 호출
-        - msg.data == False → 현재는 무시
-        """
         self.get_logger().info(
             f"[PLC] /plc/door_state topic received: {msg.data}"
         )
 
         if not msg.data:
-            # False 는 현재 '명령 없음/닫기 명령 없음' 으로 처리
             self.get_logger().info(
                 "[STM] door_state=False → STM 서비스 호출 생략"
             )
@@ -151,7 +143,7 @@ class RosController(Node):
             return
 
         req = SetBool.Request()
-        req.data = True   # stm_node는 True일 때만 문 열기 시도
+        req.data = True
 
         self.get_logger().info(
             "[STM] call /plc/door_state SetBool service (open door)"
@@ -161,7 +153,6 @@ class RosController(Node):
         future.add_done_callback(self._on_stm_door_state_result)
 
     def _on_stm_door_state_result(self, future):
-        """STM /plc/door_state 서비스 결과 처리를 위한 콜백."""
         try:
             res = future.result()
         except Exception as e:
@@ -177,9 +168,6 @@ class RosController(Node):
             f"success={res.success}, message='{res.message}'"
         )
 
-        # ★ 여기서 AGV로 door_open 상태를 전달한다.
-        #    - success=True → 문 열림 성공 → door_open=True
-        #    - success=False → 문 열림 실패 → door_open=False 로 간주
         door_open = bool(res.success)
         self.pub_door_open.publish(Bool(data=door_open))
         self.get_logger().info(
@@ -190,11 +178,6 @@ class RosController(Node):
     #  RobotArm → AGV 서비스 브릿지
     # ─────────────────────────────────────────────
     def cb_request_dispatch(self, request, response):
-        """
-        로봇암 task_manager에서 Bool 요청을 받으면
-        AGV의 /agv/request_dispatch(SetBool) 서비스에 그대로 전달.
-        """
-
         if not self.agv_client.service_is_ready():
             self.get_logger().warn("/agv/request_dispatch NOT ready")
             response.success = False
@@ -213,7 +196,6 @@ class RosController(Node):
 
         if future.result() is not None:
             agv_result = future.result()
-
             self.get_logger().info(
                 f"[AGV] response: success={agv_result.success}, "
                 f"message={agv_result.message}"
@@ -229,16 +211,10 @@ class RosController(Node):
         return response
 
     # ─────────────────────────────────────────────
-    #  PLC(SetBool) → ros_controller → RobotArm(Trigger) 서비스 브릿지
+    #  PLC(SetBool) → ros_controller → RobotArm(Trigger)
+    #  + GOOD / BAD 카운트
     # ─────────────────────────────────────────────
     def cb_plc_robotarm_detect(self, request, response):
-        """
-        PLC가 /plc/robotarm_detect(SetBool)을 호출하면,
-        ros_controller가 /robot_arm/detect(Trigger)로 검사 요청을 보내고,
-        RobotArm의 결과("GOOD"/"BAD"/...)를 SetBool 응답(success/message)으로
-        변환하여 PLC에게 반환.
-        """
-
         if not self.robotarm_detect_client.service_is_ready():
             self.get_logger().warn("/robot_arm/detect NOT ready")
             response.success = False
@@ -273,20 +249,41 @@ class RosController(Node):
 
         quality = (arm_res.message or "").upper()
 
+        # ★ 여기서 GOOD / BAD 카운트
         if quality == "GOOD":
+            self.good_count += 1
             response.success = True
             response.message = "GOOD"
         elif quality == "BAD":
+            self.bad_count += 1
             response.success = False
             response.message = "BAD"
         else:
             self.get_logger().warn(
                 f"[RobotArm] unknown quality '{arm_res.message}', treat as BAD"
             )
+            self.bad_count += 1
             response.success = False
             response.message = arm_res.message or "UNKNOWN"
 
+        # 카운트 값 퍼블리시 + 로그
+        self._publish_quality_counts()
+
         return response
+
+    def _publish_quality_counts(self):
+        """GOOD / BAD 누적 개수를 토픽으로 내보내고 로그로도 남김."""
+        msg_g = Int32()
+        msg_g.data = self.good_count
+        self.pub_good_count.publish(msg_g)
+
+        msg_b = Int32()
+        msg_b.data = self.bad_count
+        self.pub_bad_count.publish(msg_b)
+
+        self.get_logger().info(
+            f"[COUNT] GOOD={self.good_count}, BAD={self.bad_count}"
+        )
 
 
 def main(args=None):
