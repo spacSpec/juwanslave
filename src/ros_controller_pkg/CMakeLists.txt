@@ -29,6 +29,10 @@ install(
     ros_controller_pkg/ros_controller.py
   DESTINATION lib/${PROJECT_NAME}
 )
+install(FILES
+  ros_controller_pkg/db_ros.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 # ─────────────────────────────────────────────
 # 3) launch 파일 설치

@@ -53,6 +53,7 @@
 /home/taehwan/ros2_ws/install/ros_controller_pkg/share/ros_controller_pkg/msg/PlcStatus.idl
 /home/taehwan/ros2_ws/install/ros_controller_pkg/share/ros_controller_pkg/msg/PlcStatus.msg
 /home/taehwan/ros2_ws/install/ros_controller_pkg/lib/ros_controller_pkg/ros_controller.py
+/home/taehwan/ros2_ws/install/ros_controller_pkg/lib/ros_controller_pkg/db_ros.py
 /home/taehwan/ros2_ws/install/ros_controller_pkg/share/ros_controller_pkg/launch/system_bringup.launch.py
 /home/taehwan/ros2_ws/install/ros_controller_pkg/share/ament_index/resource_index/package_run_dependencies/ros_controller_pkg
 /home/taehwan/ros2_ws/install/ros_controller_pkg/share/ament_index/resource_index/parent_prefix_path/ros_controller_pkg
