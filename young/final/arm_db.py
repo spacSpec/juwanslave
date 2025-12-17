@@ -55,7 +55,7 @@ class ArmDriverNode(Node):
         except Exception as e:
             self.get_logger().error(f"⚠️ Gripper Init Warning: {e}")
 
-    # [추가] 로봇 건강 상태 계산 로직 (심영주님 전용 알고리즘)
+    # [추가] 로봇 건강 상태 계산 로직
     def calculate_health(self, volts, temps):
         p_lvl, m_lvl = "GOOD", "GOOD"
         msg = "Normal"
