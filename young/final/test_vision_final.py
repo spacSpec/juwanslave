@@ -1,5 +1,3 @@
-# !/usr/bin/env python3    NNNNNNNNNNNEEEEEEEewWWWWWWWWWWWWWWWWWWWWWW!!!!
-# sudo chmod 777 /dev/ttyACM0 
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
@@ -23,28 +21,39 @@ from ultralytics import YOLO
 # ==============================================================================
 # [설정] 경로 및 파라미터 
 # ==============================================================================
-# ★ OBB 모델 경로로 수정 (학습시킨 best.pt 경로 확인 필수!)
 YOLO_WEIGHTS_PATH = '/home/young/runs/obb/train3/weights/best.pt' 
-
-# PaDiM 가중치 경로
 WEIGHTS_PATH = '/home/young/final_ws/src/final/final/padim_weights/cube'
 DEFECT_IMAGE_SAVE_DIR = '/home/young/final_ws/src/final/defect_images' 
 
-# ★ 데이터셋 만들 때 썼던 그 크기와 똑같이 설정! (120)
 FIXED_SIZE = 120 
-
 NUM_RANDOM_CHANNELS = 300 
 TOP_N_PATCHES = 10 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-ANOMALY_THRESHOLD = 90.0 
+ANOMALY_THRESHOLD = 91.0 
 TARGET_DEVICE_ID = '/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0'
 
-# ROI 및 로봇 파라미터
-ROI_X = 470; ROI_Y = 130; ROI_W = 300; ROI_H = 350
+# [복구됨] 고해상도(1280x960) 기준 ROI 좌표
+ROI_X = 470
+ROI_Y = 130
+ROI_W = 300
+ROI_H = 350
+
+# [복구됨] 박스 상태 확인용 ROI (1280x960 기준)
+BOX_ROI_X = 850
+BOX_ROI_Y = 580
+BOX_ROI_W = 400
+BOX_ROI_H = 350
+
+BOX_FULL_THRESHOLD = 3  
+
 CUBE_REAL_SIZE_MM = 50.0 
-CENTER_ROBOT_X = -50.0   
-CENTER_ROBOT_Y = 270.0   
+CENTER_ROBOT_X = -42.0   
+CENTER_ROBOT_Y = 230.0   
 FRAME_TIMEOUT_SEC = 1.0 
+
+# [천재 심영주 HSV 설정값] (툴 검증 완료)
+HSV_LOWER_GREEN = np.array([51, 69, 69])
+HSV_UPPER_GREEN = np.array([91, 255, 255])
 
 class VisionNode(Node):
     def __init__(self):
@@ -67,7 +76,12 @@ class VisionNode(Node):
         self.running = True           
 
         self.image_pub = self.create_publisher(RosImage, '/vision/defect_img', 10)
+        
+        # 1. 픽킹 좌표 감지 서비스
         self.detect_srv = self.create_service(DetectItem, '/vision/detect_item', self.handle_detection_request)
+        
+        # 2. 박스 상태 확인 서비스
+        self.box_check_srv = self.create_service(Trigger, '/vision/check_box_full', self.handle_box_check_request)
         
         if not os.path.exists(DEFECT_IMAGE_SAVE_DIR):
             os.makedirs(DEFECT_IMAGE_SAVE_DIR)
@@ -94,7 +108,6 @@ class VisionNode(Node):
     def load_yolo_model(self):
         try:
             self.get_logger().info(f"🚀 Loading YOLO OBB: {YOLO_WEIGHTS_PATH}")
-            # ★ 핵심: task='obb' 설정
             self.yolo_model = YOLO(YOLO_WEIGHTS_PATH, task='obb')
         except Exception as e:
             self.get_logger().error(f"❌ YOLO Fail: {e}")
@@ -113,15 +126,22 @@ class VisionNode(Node):
             self.cap.release()
         camera_index = self.find_camera_index(TARGET_DEVICE_ID)
         if camera_index is None: camera_index = 4
+        
         self.cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
         if self.cap.isOpened():
             self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+            
+            # [설정] 고해상도(1280x960) & FPS 15 (대역폭 안정화)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 960)
-            self.cap.set(cv2.CAP_PROP_FPS, 5) 
+            self.cap.set(cv2.CAP_PROP_FPS, 15)
+            
             time.sleep(2) 
             self.is_camera_open = True
-            self.get_logger().info(f"✅ Camera {camera_index} OK.")
+            
+            w = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+            h = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            self.get_logger().info(f"✅ Camera {camera_index} OK. Res: {int(w)}x{int(h)}")
         else:
             self.is_camera_open = False
     
@@ -150,13 +170,19 @@ class VisionNode(Node):
                 frame_to_show = self.latest_frame.copy()
         
         if frame_to_show is not None:
+            # 픽킹 ROI (Blue)
             cv2.rectangle(frame_to_show, (ROI_X, ROI_Y), (ROI_X+ROI_W, ROI_Y+ROI_H), (255, 0, 0), 2)
-            cv2.putText(frame_to_show, "ROI", (ROI_X, ROI_Y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+            cv2.putText(frame_to_show, "Pick ROI", (ROI_X, ROI_Y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+            
+            # 박스 ROI (Yellow)
+            cv2.rectangle(frame_to_show, (BOX_ROI_X, BOX_ROI_Y), (BOX_ROI_X+BOX_ROI_W, BOX_ROI_Y+BOX_ROI_H), (0, 255, 255), 2)
+            cv2.putText(frame_to_show, "Box ROI", (BOX_ROI_X, BOX_ROI_Y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
             
             if self.last_detected_box is not None and (time.time() - self.last_detect_time < 5.0):
                 color = (0, 0, 255) if self.last_detected_quality == "DEFECT" else (0, 255, 0)
-                # OBB 박스 그리기
                 cv2.drawContours(frame_to_show, [self.last_detected_box], 0, color, 3)
+                
+                # 시각화 라벨에 각도 추가
                 label = f"{self.last_detected_quality} ({self.last_detected_score:.1f})"
                 cv2.putText(frame_to_show, label, (self.last_detected_box[1][0], self.last_detected_box[1][1] - 10), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
@@ -203,30 +229,23 @@ class VisionNode(Node):
         quality = "DEFECT" if score > self.ANOMALY_THRESHOLD else "GOOD"
         return quality, score
 
-    # ==========================================================================
-    # [★핵심 수정★] OBB 기반 회전 보정 크롭 함수 (학습 때 쓴 그 함수!)
-    # ==========================================================================
     def crop_rotated_rect(self, image, center, rotation_rad, target_size):
-        """
-        OBB가 준 각도(rotation_rad)를 역보정하여 큐브를 0도 자세로 만듭니다.
-        """
-        # 1. 라디안 -> 도 변환
         angle_deg = math.degrees(rotation_rad)
         
-        # 2. 역회전 각도 계산 (-angle)
+        # 정사각형 90도 주기 정규화
+        angle_deg = angle_deg % 90
+        if angle_deg > 45:
+            angle_deg -= 90
+        
         rotation_angle = -angle_deg 
-
-        # 3. 회전 매트릭스 생성
         M = cv2.getRotationMatrix2D(center, rotation_angle, 1.0)
         
-        # 4. 이미지 전체 회전 (배경 복사)
         rotated = cv2.warpAffine(
             image, M, 
             (image.shape[1], image.shape[0]), 
             borderMode=cv2.BORDER_REPLICATE
         )
         
-        # 5. 중심 기준으로 고정 크기(FIXED_SIZE)로 잘라내기
         crop_half = target_size // 2
         cx, cy = int(center[0]), int(center[1])
         
@@ -237,23 +256,18 @@ class VisionNode(Node):
         
         cropped = rotated[start_y:end_y, start_x:end_x]
         
-        # 크기 안맞으면(경계선 등) 실패 처리
         if cropped.shape[0] != target_size or cropped.shape[1] != target_size:
             return None
             
         return cropped
 
     def pixel_to_robot(self, px, py, mm_per_pixel):
-        # ROI 중심 기준 좌표로 변환 (기존 로직 유지)
         dx_px = px - (ROI_W / 2)
         dy_px = py - (ROI_H / 2)
-        
         dx_mm = dx_px * mm_per_pixel
         dy_mm = dy_px * mm_per_pixel
-        
-        # 로봇 좌표계 변환
-        robot_x = (dy_mm * -1.0) + CENTER_ROBOT_X
-        robot_y = (dx_mm * -1.0) + CENTER_ROBOT_Y
+        robot_x = (dy_mm * -1.1) + CENTER_ROBOT_X
+        robot_y = (dx_mm * -1.2) + CENTER_ROBOT_Y
         return robot_x, robot_y
 
     def save_defect_image_to_file(self, image_bgr):
@@ -263,7 +277,78 @@ class VisionNode(Node):
         except: pass
 
     # ==========================================================================
-    # [서비스 핸들러] OBB 추론 -> OBB 좌표 사용 -> PaDiM
+    # 박스 상태 확인 핸들러 (서비스 콜백)
+    # ==========================================================================
+    def handle_box_check_request(self, request, response):
+        self.get_logger().info("📦 Vision: Checking Box (Hybrid Mode: YOLO + HSV)...")
+        
+        raw = None
+        with self.frame_lock:
+            if self.latest_frame is not None:
+                raw = self.latest_frame.copy()
+        
+        if raw is None:
+            response.success = False; response.message = "NO_FRAME"; return response
+
+        try:
+            # ROI 추출 (고해상도 기준)
+            roi_img = raw[BOX_ROI_Y : BOX_ROI_Y+BOX_ROI_H, BOX_ROI_X : BOX_ROI_X+BOX_ROI_W]
+            if roi_img.size == 0:
+                response.success = False; response.message = "ROI_ERROR"; return response
+
+            # A. YOLO Check
+            yolo_count = 0
+            try:
+                results = self.yolo_model(roi_img, imgsz=640, conf=0.25, verbose=False)
+                for r in results:
+                    if r.obb is not None:
+                        yolo_count += len(r.obb)
+            except Exception as e:
+                self.get_logger().warn(f"YOLO Check Fail: {e}")
+
+            # B. HSV Check (수정된 HSV 값 적용)
+            hsv_count = 0
+            hsv_area_total = 0
+            try:
+                hsv = cv2.cvtColor(roi_img, cv2.COLOR_BGR2HSV)
+                mask = cv2.inRange(hsv, HSV_LOWER_GREEN, HSV_UPPER_GREEN)
+                
+                kernel = np.ones((5,5), np.uint8)
+                mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+                
+                contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                
+                for cnt in contours:
+                    area = cv2.contourArea(cnt)
+                    # 고해상도이므로 노이즈 임계값도 원래대로(1000) 유지
+                    if area > 1000: 
+                        hsv_count += 1
+                        hsv_area_total += area
+            except Exception as e:
+                self.get_logger().warn(f"HSV Check Fail: {e}")
+
+            cond_yolo = (yolo_count >= BOX_FULL_THRESHOLD)
+            cond_hsv_count = (hsv_count >= BOX_FULL_THRESHOLD)
+            # 면적 임계값도 고해상도 기준(12000)으로 유지
+            cond_hsv_area = (hsv_area_total > 20000) 
+
+            is_full = cond_yolo or cond_hsv_count or cond_hsv_area
+            log_msg = f"📦 Result - YOLO:{yolo_count}, HSV_Cnt:{hsv_count}, Area:{int(hsv_area_total)}"
+            self.get_logger().info(log_msg)
+
+            if is_full:
+                response.success = True; response.message = f"FULL ({log_msg})"
+            else:
+                response.success = False; response.message = f"NOT_FULL ({log_msg})"
+
+        except Exception as e:
+            self.get_logger().error(f"❌ Box Check Logic Error: {e}")
+            response.success = False; response.message = "ERROR"
+            
+        return response
+
+    # ==========================================================================
+    # [핵심] 픽킹 서비스 핸들러 (YOLO 위치 + OpenCV 각도)
     # ==========================================================================
     def handle_detection_request(self, request, response):
         self.get_logger().info("▶️ Service Call Received")
@@ -279,9 +364,7 @@ class VisionNode(Node):
             if raw is None:
                 response.success = False; response.message = "FRAME_STALE"; return response
 
-            # ------------------------------------------------------------------
-            # 1. [YOLO OBB] 추론 실행
-            # ------------------------------------------------------------------
+            # 1. YOLO로 "위치" 찾기
             results = self.yolo_model(raw, imgsz=640, conf=0.5, verbose=False)
             
             quality = "NO_OBJECT"; robot_x = 0.0; robot_y = 0.0; angle_res = 0.0; score = 0.0
@@ -290,12 +373,11 @@ class VisionNode(Node):
 
             for r in results:
                 if r.obb is None: continue
-                # xywhr: x_center, y_center, width, height, rotation(rad)
                 obb_data = r.obb.xywhr.cpu().numpy()
                 
-                # ROI 안에 중심이 들어오는 객체 찾기
                 for obb in obb_data:
                     cx, cy, w, h, rot = obb
+                    # ROI 필터링
                     if (ROI_X <= cx <= ROI_X + ROI_W) and (ROI_Y <= cy <= ROI_Y + ROI_H):
                         best_obb = obb
                         found_obb = True
@@ -303,54 +385,88 @@ class VisionNode(Node):
                 if found_obb: break
 
             if found_obb:
-                cx, cy, w, h, rotation_rad = best_obb
+                cx, cy, w, h, _ = best_obb # YOLO 각도 무시
                 center = (cx, cy)
                 
                 # ------------------------------------------------------------------
-                # 2. [좌표 변환] mm/pixel 및 로봇 좌표 계산
+                # [천재 솔루션] OpenCV HSV + minAreaRect로 "진짜 각도" 계산
                 # ------------------------------------------------------------------
-                # OBB가 준 w, h 중 큰 값을 기준으로 스케일 계산
+                try:
+                    # 1. YOLO 중심 기준 Crop
+                    crop_size = 200 # 고해상도니까 조금 더 크게 잡음
+                    x1 = max(0, int(cx - crop_size//2))
+                    y1 = max(0, int(cy - crop_size//2))
+                    x2 = min(raw.shape[1], int(cx + crop_size//2))
+                    y2 = min(raw.shape[0], int(cy + crop_size//2))
+                    
+                    crop_img = raw[y1:y2, x1:x2]
+                    
+                    # 2. HSV 마스킹 (검증된 값 사용)
+                    hsv = cv2.cvtColor(crop_img, cv2.COLOR_BGR2HSV)
+                    mask = cv2.inRange(hsv, HSV_LOWER_GREEN, HSV_UPPER_GREEN)
+                    
+                    # 3. 윤곽선 및 최소 외접 사각형
+                    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    
+                    real_angle = 10.0
+                    if contours:
+                        c = max(contours, key=cv2.contourArea)
+                        rect = cv2.minAreaRect(c) 
+                        
+                        # minAreaRect의 각도 -> -45 ~ 45도로 정규화
+                        raw_cv_angle = rect[2]
+                        if raw_cv_angle > 45:
+                            real_angle = raw_cv_angle - 90
+                        elif raw_cv_angle < -45:
+                            real_angle = raw_cv_angle + 90
+                        else:
+                            real_angle = raw_cv_angle
+                            
+                        # 하드웨어 오차 보정값 (Calibration Offset)
+                        OFFSET_ANGLE = -20.0 
+
+    # 계산된 각도에 보정값을 더해줍니다.
+                        angle_res = real_angle + OFFSET_ANGLE
+                        
+                        self.get_logger().info(f"📐 OpenCV Angle: {angle_res:.1f} deg")
+                    else:
+                        angle_res = math.degrees(best_obb[4]) # 실패시 백업
+
+                except Exception as e:
+                    self.get_logger().warn(f"Angle Calc Fail: {e}")
+                    angle_res = math.degrees(best_obb[4])
+
+                # ------------------------------------------------------------------
+                
                 cube_px = max(w, h)
                 mm_per_pixel = CUBE_REAL_SIZE_MM / cube_px if cube_px > 0 else 1.0
                 
-                # ROI 기준 상대 좌표 계산
-                # OBB 좌표(cx, cy)는 전체 이미지 기준이므로 ROI_X, ROI_Y를 빼야 함
                 roi_rel_x = cx - ROI_X
                 roi_rel_y = cy - ROI_Y
                 robot_x, robot_y = self.pixel_to_robot(roi_rel_x, roi_rel_y, mm_per_pixel)
 
-                # 각도 변환 (라디안 -> 도)
-                angle_res = math.degrees(rotation_rad)
-
-                # ------------------------------------------------------------------
-                # 3. [Preprocessing] OBB 각도로 역회전 크롭 (학습과 동일 조건)
-                # ------------------------------------------------------------------
+                rotation_rad = math.radians(angle_res)
                 ai_input = self.crop_rotated_rect(raw, center, rotation_rad, FIXED_SIZE)
                 
-                # 4. [AI] PaDiM 판별
                 if ai_input is not None and ai_input.size > 0:
                     quality, score = self.detect_anomaly(ai_input)
                 else:
-                    quality = "ERROR" # 크롭 실패
+                    quality = "ERROR"
 
-                # 시각화용 박스 그리기
-                # OBB의 4개 꼭짓점 좌표 (xyxyxyxy format for visualization)
                 if r.obb.xyxyxyxy is not None:
-                     # 해당 객체의 인덱스를 찾아야 하는데, 위에서 best_obb를 찾았으니
-                     # 여기서는 간단히 OBB 중심과 각도로 박스 포인트를 다시 계산해서 그립니다.
-                     rect = ((cx, cy), (w, h), angle_res)
-                     viz_box = cv2.boxPoints(rect).astype(int)
+                     rect_viz = ((cx, cy), (w, h), angle_res)
+                     viz_box = cv2.boxPoints(rect_viz).astype(int)
                      self.last_detected_box = viz_box
                 
                 self.last_detected_quality = quality
                 self.last_detected_score = score
                 self.last_detect_time = time.time()
 
-                # 화면 표시
                 color = (0, 0, 255) if quality == "DEFECT" else (0, 255, 0)
                 if self.last_detected_box is not None:
                     cv2.drawContours(raw, [self.last_detected_box], 0, color, 3)
-                    cv2.putText(raw, f"{quality} ({score:.1f})", 
+                    label_str = f"{quality} {angle_res:.1f}deg"
+                    cv2.putText(raw, label_str, 
                                (self.last_detected_box[1][0], self.last_detected_box[1][1]-10),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
                 
