@@ -15,55 +15,55 @@ class TaskManagerNode(Node):
     def __init__(self):
         super().__init__('task_manager_node')
         
-        # 중첩 서비스 호출 시 데드락 방지를 위한 ReentrantCallbackGroup
         self.cb_group = ReentrantCallbackGroup()
 
         # [Servers]
         self.start_srv = self.create_service(
-            Trigger, 
-            '/system/start_work', 
-            self.handle_system_start, 
+            Trigger,
+            '/system/start_work',
+            self.handle_system_start,
             callback_group=self.cb_group
         )
         self.trigger_srv = self.create_service(
             Trigger, 
-            '/robot_arm/detect', 
-            self.handle_controller_trigger, 
+            '/robot_arm/detect',
+            self.handle_controller_trigger,
             callback_group=self.cb_group
         )
 
         # [Clients]
         self.vision_client = self.create_client(
             DetectItem, 
-            '/vision/detect_item', 
+            '/vision/detect_item',
             callback_group=self.cb_group
         )
-        
-        # [NEW] Vision 박스 확인용 클라이언트
         self.vision_box_client = self.create_client(
             Trigger, 
             '/vision/check_box_full', 
             callback_group=self.cb_group
         )
-        
         self.arm_client = self.create_client(
             ArmCommand, 
             '/arm/execute_cmd', 
             callback_group=self.cb_group
         )
-        
         self.agv_client = self.create_client(
             SetBool, 
             '/agv/request_dispatch', 
             callback_group=self.cb_group
         )
+        
+        # [NEW] 안전 해제용 클라이언트
+        self.safety_reset_client = self.create_client(
+            Trigger, 
+            '/arm/safety_reset', 
+            callback_group=self.cb_group
+        )
+
         self.count_pub = self.create_publisher(Int32, '/robot/work_cnt', 10)
         
-        # 상태 변수들
         self.is_system_active = False 
         self.is_waiting_agv = False 
-        
-        # 박스 카운팅 변수 제거됨 (비전이 판단하므로 total_count만 통계용으로 유지)
         self.total_count = 0 
         
         self.get_logger().info('✅ Task Manager Ready. (Mode: Vision Box Check)')
@@ -74,9 +74,10 @@ class TaskManagerNode(Node):
     def _user_input_loop(self):
         print("\n" + "="*40)
         print(" [TEST MODE COMMANDS]")
-        print("  - 's' + 엔터: 시스템 시작 (Start & Check Box)")
-        print("  - 그냥 엔터 : 작업 트리거 (PLC 신호 시뮬레이션)")
-        print("  - 'q' + 엔터: 종료")
+        print("  - 's' + 엔터   : 시스템 시작 (Start & Check Box)")
+        print("  - '1234' + 엔터: 🔓 안전 펜스 잠금 해제 (일시정지 풀기)")
+        print("  - 그냥 엔터    : 작업 트리거 (PLC 신호 시뮬레이션)")
+        print("  - 'q' + 엔터   : 종료")
         print("="*40 + "\n")
 
         while rclpy.ok():
@@ -89,11 +90,37 @@ class TaskManagerNode(Node):
                     self.get_logger().info("👋 Shutting down...")
                     rclpy.shutdown()
                     sys.exit(0)
+                
+                # [NEW] 비밀번호 입력 처리
+                elif cmd == '1234':
+                    self.get_logger().info("⌨️ User Input: SAFETY UNLOCK CODE '1234'")
+                    self.call_safety_reset()
+
                 else:
                     self.get_logger().info("⌨️ User Input: TRIGGER RECEIVED")
                     self._execute_task_logic(source="KEYBOARD")
             except Exception as e:
                 print(f"Input Error: {e}")
+
+    # [NEW] 안전 해제 서비스 호출 함수
+    def call_safety_reset(self):
+        if not self.safety_reset_client.wait_for_service(1.0):
+            self.get_logger().error("❌ Safety Reset Service Unavailable")
+            return
+        
+        req = Trigger.Request()
+        future = self.safety_reset_client.call_async(req)
+        future.add_done_callback(self.safety_reset_done_callback)
+
+    def safety_reset_done_callback(self, future):
+        try:
+            res = future.result()
+            if res.success:
+                self.get_logger().info(f"🔓 Safety Reset SUCCESS: {res.message}")
+            else:
+                self.get_logger().error(f"🚫 Safety Reset FAILED: {res.message}")
+        except Exception as e:
+            self.get_logger().error(f"❌ Safety Reset Error: {e}")
 
     def handle_system_start(self, request, response):
         self.get_logger().info("📢 Cmd from Ros Controller: SYSTEM START")
@@ -115,6 +142,7 @@ class TaskManagerNode(Node):
             response.success = True
             
         response.message = result_msg
+        self.get_logger().info(f"📤 Sending Response: Success={response.success}, Msg={response.message}")
         return response
 
     def start_system_logic(self):
@@ -159,22 +187,20 @@ class TaskManagerNode(Node):
         return quality
 
     def call_vision_service(self):
+        # 1. 서비스 서버가 켜져 있는지 확인
         if not self.vision_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().error("❌ Vision service is not available.")
             return None
 
         req = DetectItem.Request()
-        future = self.vision_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
-
-        if not future.done():
-            self.get_logger().error("❌ Vision service timeout.")
-            return None
-
+        
+        # 2. [수정] spin을 삭제하고 동기 호출(call) 사용
+        # MultiThreadedExecutor 덕분에 여기서 기다려도 다른 통신이 막히지 않습니다.
         try:
-            return future.result()
+            response = self.vision_client.call(req) 
+            return response
         except Exception as e:
-            self.get_logger().error(f"❌ Vision Call Exception: {e}")
+            self.get_logger().error(f"❌ Vision Call Failed: {e}")
             return None
 
     def send_arm_command(self, cmd, coord):
@@ -187,36 +213,29 @@ class TaskManagerNode(Node):
         req.target_coord = coord
         
         future = self.arm_client.call_async(req)
-        # 중요: 로봇 동작이 끝나면 콜백에서 후속 작업(박스체크) 처리
         future.add_done_callback(self.arm_done_callback)
 
-    # [수정된 부분] 로봇 팔 동작 완료 콜백
     def arm_done_callback(self, future):
         try:
             result = future.result()
             self.get_logger().info(f"🤖 Arm Status: {result.message}")
             
-            # 카운팅용 퍼블리시 (통계용)
             self.total_count += 1
             msg = Int32()
             msg.data = self.total_count
             self.count_pub.publish(msg)
 
-            # [핵심 변경] 동작 완료 후 Vision에게 "박스 찼니?" 물어보기
-            # (만약 pick_good을 성공했으면 박스에 넣었을 것이고, discard나 home 이동이었어도 상태 점검 차원)
             self.check_box_and_act()
             
         except Exception as e:
             self.get_logger().error(f"❌ Callback Error: {e}")
 
-    # [NEW] 비전 박스 검사 및 AGV 호출 함수
     def check_box_and_act(self):
         if not self.vision_box_client.wait_for_service(1.0):
             self.get_logger().error("❌ Vision Box Service Unavailable")
             return
 
         req = Trigger.Request()
-        # 비동기 호출
         future = self.vision_box_client.call_async(req)
         future.add_done_callback(self.box_check_done_callback)
 
@@ -224,15 +243,12 @@ class TaskManagerNode(Node):
         try:
             res = future.result()
             
-            # Vision Node가 success=True를 보내면 "박스가 꽉 찼음"을 의미
             if res.success: 
                 self.get_logger().warn(f"🛑 Vision Confirmed: BOX IS FULL! ({res.message}) Calling AGV...")
                 self.is_waiting_agv = True
                 self.control_agv(enable=True)
             else:
                 self.get_logger().info(f"✅ Box Not Full ({res.message}). System Ready.")
-                # 여기서 is_waiting_agv = False를 명시적으로 해줄 수도 있지만,
-                # AGV가 떠난 뒤에만 풀어주는 것이 안전하므로 그대로 둠.
                 
         except Exception as e:
             self.get_logger().error(f"❌ Box Check Error: {e}")
@@ -257,9 +273,8 @@ class TaskManagerNode(Node):
             
             if res.success and action_str == "CALL":
                 self.get_logger().info(f"✅ AGV Process Complete (Box Replaced). Resuming...")
-                self.is_waiting_agv = False # 작업 재개 허용
+                self.is_waiting_agv = False 
                 
-                # 박스 교체 후 혹시 모르니 다시 홈 자세 잡기 (선택 사항)
                 self.send_arm_command("home", [0.0, 0.0, 0.0])
 
             elif not res.success:
