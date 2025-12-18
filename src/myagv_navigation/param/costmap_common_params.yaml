@@ -1,0 +1,38 @@
+# footprint: [[0.08, 0.06], [0.08,-0.06], [-0.08, -0.06], [-0.08, 0.06]]
+footprint: [[0.23, 0.06], [0.23, -0.06], [-0.08, -0.06], [-0.08, 0.06]] #지게차 2cm 추가 포함
+# footprint: [[0.12, 0.14], [0.12,-0.14], [-0.12, -0.14], [-0.12, 0.14]]
+footprint_padding: 0.03
+
+
+transform_tolerance: 0.2
+
+always_send_full_costmap: true
+
+obstacle_layer:
+  enabled: true
+  obstacle_range: 2.5
+  raytrace_range: 3.0
+  # 사실 이 레이어 안의 inflation_radius는 큰 의미가 없지만, 0.04는 너무 작으니 맞춰줍니다.
+  inflation_radius: 0.6 
+  combination_method: 1
+  observation_sources: laser_scan_sensor 
+  track_unknown_space: true
+  laser_scan_sensor:
+    data_type: LaserScan
+    topic: /scan
+    marking: true
+    clearing: true
+
+# 3. 핵심 수정 부분: inflation_layer (가장 중요)
+inflation_layer:
+  enabled: true
+  # 값을 낮추어 벽에서 멀어질수록 비용이 서서히 줄어들게 만듭니다 (중앙 유도)
+  # cost_scaling_factor: 2.5 
+  cost_scaling_factor: 5.0
+  # 로봇 크기(0.23)보다 훨씬 커야 합니다. 최소 0.6 이상, 복도가 넓다면 1.0 추천.
+  # inflation_radius: 0.7
+  inflation_radius: 0.4
+
+static_layer:
+  enabled: true
+  map_topic:  "/map"

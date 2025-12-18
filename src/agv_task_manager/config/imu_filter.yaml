@@ -1,0 +1,20 @@
+frequency: 100                 # MyAGV가 보내는 raw IMU 주기와 맞춤
+sensor_timeout: 0.1
+
+use_mag: false                 # magnetometer 없음 → false 필수
+publish_tf: false              # tf 충돌 방지
+reverse_tf: false
+fixed_frame: "imu_link"
+
+# 필터 민감도 (너처럼 yaw-rate만 쓸 때 적당한 값)
+gain: 0.15                     # ⭐ default=0.033(너무 느림). 0.10~0.20 추천
+
+# 노이즈 파라미터
+gyro_bias_alpha: 0.0005        # 드리프트 안정화
+orientation_stddev: 0.1        # orientation 사용 안 하므로 의미 크지 않음
+
+# Input/Output topic
+imu_topic: "/imu/data_raw"
+filtered_imu_topic: "/imu/data_filtered"
+
+publish_bias: false

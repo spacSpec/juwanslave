@@ -1,0 +1,34 @@
+<launch>
+
+  <node pkg="move_base" type="move_base" name="move_base" output="screen" clear_params="true">
+
+    <param name="controller_frequency" value="5.0"/>
+    <param name="controller_patience" value="5.0"/>
+    <param name="planner_patience" value="5.0"/>
+
+    <!-- Recovery Behavior 활성화 -->
+    <param name="recovery_behavior_enabled" value="true"/>
+    <param name="clearing_rotation_allowed" value="true"/>
+    <!-- <param name="shutdown_costmaps" value="false"/> -->
+
+    <!-- recovery plugins 명시 (clear_costmaps 생성 핵심) -->
+    <rosparam param="recovery_behaviors">
+      [
+        {name: clear_costmap, type: clear_costmap_recovery/ClearCostmapRecovery},
+        {name: rotate_recovery, type: rotate_recovery/RotateRecovery}
+      ]
+    </rosparam>
+
+    <!-- Costmap -->
+    <rosparam file="$(find myagv_navigation)/config/costmap_common_params.yaml" command="load" ns="global_costmap"/>
+    <rosparam file="$(find myagv_navigation)/config/costmap_common_params.yaml" command="load" ns="local_costmap"/>
+    <rosparam file="$(find myagv_navigation)/config/local_costmap_params.yaml" command="load"/>
+    <rosparam file="$(find myagv_navigation)/config/global_costmap_params.yaml" command="load"/>
+
+    <!-- TEB Local Planner -->
+    <!-- <rosparam file="$(find myagv_navigation)/config/teb_local_planner_params.yaml" command="load"/> -->
+    <rosparam file="$(find myagv_navigation)/config/base_local_planner_params.yaml" command="load"/>
+
+  </node>
+
+</launch>

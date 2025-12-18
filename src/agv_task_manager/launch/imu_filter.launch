@@ -1,0 +1,25 @@
+<launch>
+
+  <!-- 1) IMU Serial -> /imu/data 퍼블리셔 실행 -->
+  <!-- <node pkg="agv_task_manager" type="imu_mpu6050_publisher.py" name="imu_publisher" output="screen">
+    <param name="port" value="/dev/ttyUSB0"/>
+    <param name="baud" value="115200"/>
+  </node> -->
+
+  <!-- 2) Madgwick 필터 적용 /imu/data -> /imu/data_filtered -->
+  <node pkg="imu_filter_madgwick" type="imu_filter_node" name="imu_filter" output="screen">
+    <rosparam command="load" file="$(find agv_task_manager)/config/imu_filter.yaml"/>
+    
+    <!-- Input & Output remap -->
+    <!-- 입력: C++에서 쏘는 /imu/data_raw -->
+    <remap from="imu/data_raw" to="/imu/data_raw"/>    
+    <remap from="/imu/data" to="/imu/data_filtered"/>
+  </node>
+
+  <!-- 3) IMU Orientation 라디안 출력 (roll, pitch, yaw) -->
+  <!-- <node pkg="agv_task_manager" type="imu_rpy_correct_pub.py" name="imu_corrector" output="screen" /> -->
+
+  <!-- 4) RViz IMU Visualization -->
+  <!-- <node pkg="rviz" type="rviz" name="imu_rviz" output="screen"/> -->
+
+</launch>

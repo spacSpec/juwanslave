@@ -1,0 +1,63 @@
+frequency: 50
+sensor_timeout: 0.1
+two_d_mode: true
+publish_tf: false      # MyAGV.cpp에서 odom->base_footprint 이미 송신함
+
+map_frame: map
+odom_frame: odom
+base_link_frame: base_footprint
+world_frame: odom
+
+
+#######################################
+# ODOM (MyAGV — 주 센서)
+#######################################
+odom0: /odom
+odom0_queue_size: 10
+
+# MyAGV가 제공하는 것:
+# x,y + yaw(orientation) + vx,vy + vtheta
+odom0_config: [
+  true,  true,  false,   # x, y, z
+  false, false, false,    # roll, pitch, yaw (MyAGV theta 사용)
+  true,  true,  false,   # vx, vy, vz
+  false, false, true     # vroll, vpitch, vyaw
+]
+
+
+#######################################
+# IMU (yaw-rate only)
+#######################################
+imu0: /imu/data_filtered
+imu0_queue_size: 10
+
+# IMU는 orientation이 없음(cov=-1)
+# 실제로 쓸 수 있는 건 angular velocity z 뿐
+imu0_config: [
+  false, false, false,   # x,y,z
+  false, false, false,   # roll,pitch,yaw(orientation 무효)
+  false, false, false,   # linear velocity
+  false, false, true     # angular velocity yaw only
+]
+
+imu0_differential: false
+imu0_remove_gravitational_acceleration: false
+
+
+#######################################
+# PROCESS NOISE (너가 사용하는 구조에 가장 안정적인 값)
+#######################################
+process_noise_covariance: [
+  0.05, 0,    0,    0,     0,     0,     0.2,   0,     0,    0,     0,    0,
+  0,    0.05, 0,    0,     0,     0,     0,     0.02,  0,    0,     0,    0,
+  0,    0,    1e6,  0,     0,     0,     0,     0,     0.04, 0,    0,    0,
+  0,    0,    0,    0.03,  0,     0,     0,     0,     0,    0.01, 0,    0,
+  0,    0,    0,    0,     0.03,  0,     0,     0,     0,    0,     0.01, 0,
+  0,    0,    0,    0,     0,     0.06,  0,     0,     0,    0,     0,    0.5,
+  0.2,  0,    0,    0,     0,     0,     0.2,   0,     0,    0,     0,    0,
+  0,    0.02, 0,    0,     0,     0,     0,     0.02,  0,    0,     0,    0,
+  0,    0,    0.04, 0,     0,     0,     0,     0,     0.04, 0,     0,    0,
+  0,    0,    0,    0.01,  0,     0,     0,     0,     0,    0.01, 0,    0,
+  0,    0,    0,    0,     0.01,  0,     0,     0,     0,    0,     0.01, 0,
+  0,    0,    0,    0,     0,     0.5,   0,     0,     0,    0,     0,    0.5
+]

@@ -1,0 +1,65 @@
+frequency: 50
+sensor_timeout: 0.1
+two_d_mode: true
+
+# MyAGV.cpp에서 odom->base_footprint TF를 이미 송신하므로
+publish_tf: false
+
+map_frame: map
+odom_frame: odom
+base_link_frame: base_footprint
+world_frame: odom
+
+# (선택) 디버깅용
+print_diagnostics: true
+# debug: true
+# debug_out_file: /tmp/ekf_debug.txt
+
+
+#######################################
+# ODOM (MyAGV — 주 센서)
+#######################################
+odom0: /odom
+odom0_queue_size: 10
+
+# MyAGV가 제공하는 것:
+# x, y, yaw(orientation), vx, vy, vtheta
+# 여기서는 기존 의도 유지: 위치/속도/각속도만 사용, yaw orientation은 사용 안 함
+odom0_config: [
+  true,  true,  false,   # x, y, z
+  false, false, false,   # roll, pitch, yaw (orientation은 사용 안 함)
+  true,  true,  false,   # vx, vy, vz
+  false, false, true     # vroll, vpitch, vyaw
+]
+
+odom0_differential: false
+odom0_relative:     false
+
+
+#######################################
+# IMU (yaw-rate only)
+#######################################
+imu0: /imu/data_filtered
+imu0_queue_size: 10
+
+# IMU는 orientation이 없고(orientation cov=-1),
+# angular_velocity.z (yaw rate)만 사용
+imu0_config: [
+  false, false, false,   # x, y, z
+  false, false, false,   # roll, pitch, yaw (orientation)
+  false, false, false,   # vx, vy, vz
+  false, false, true     # vroll, vpitch, vyaw (yaw rate만 사용)
+]
+
+imu0_differential: false
+imu0_relative:     false
+imu0_remove_gravitational_acceleration: false
+
+
+#######################################
+# PROCESS NOISE
+#######################################
+# ➜ 여기서는 직접 지정하지 않고 robot_localization 기본값 사용
+#    (직접 12x12 매트릭스를 넣어주면 수치 조건이 나빠져서
+#     NaN이 쉽게 발생할 수 있음)
+# process_noise_covariance: [...]
