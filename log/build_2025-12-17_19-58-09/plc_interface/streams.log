@@ -1,0 +1,24 @@
+[1.749s] Invoking command in '/home/taehwan/ros2_ws/src/plc_interface': PYTHONPATH=/home/taehwan/ros2_ws/build/plc_interface/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/plc_interface build --build-base /home/taehwan/ros2_ws/build/plc_interface/build install --record /home/taehwan/ros2_ws/build/plc_interface/install.log --single-version-externally-managed install_data
+[2.126s] running egg_info
+[2.127s] writing ../../build/plc_interface/plc_interface.egg-info/PKG-INFO
+[2.129s] writing dependency_links to ../../build/plc_interface/plc_interface.egg-info/dependency_links.txt
+[2.130s] writing entry points to ../../build/plc_interface/plc_interface.egg-info/entry_points.txt
+[2.130s] writing requirements to ../../build/plc_interface/plc_interface.egg-info/requires.txt
+[2.130s] writing top-level names to ../../build/plc_interface/plc_interface.egg-info/top_level.txt
+[2.135s] reading manifest file '../../build/plc_interface/plc_interface.egg-info/SOURCES.txt'
+[2.137s] writing manifest file '../../build/plc_interface/plc_interface.egg-info/SOURCES.txt'
+[2.138s] running build
+[2.138s] running build_py
+[2.139s] copying plc_interface/plc_node.py -> /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface
+[2.140s] running install
+[2.140s] running install_lib
+[2.140s] copying /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface/plc_node.py -> /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface
+[2.143s] byte-compiling /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface/plc_node.py to plc_node.cpython-310.pyc
+[2.145s] running install_data
+[2.145s] running install_egg_info
+[2.150s] removing '/home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface-0.0.1-py3.10.egg-info' (and everything under it)
+[2.150s] Copying ../../build/plc_interface/plc_interface.egg-info to /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface-0.0.1-py3.10.egg-info
+[2.151s] running install_scripts
+[2.183s] Installing plc_node script to /home/taehwan/ros2_ws/install/plc_interface/lib/plc_interface
+[2.183s] writing list of installed files to '/home/taehwan/ros2_ws/build/plc_interface/install.log'
+[2.208s] Invoked command in '/home/taehwan/ros2_ws/src/plc_interface' returned '0': PYTHONPATH=/home/taehwan/ros2_ws/build/plc_interface/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/plc_interface build --build-base /home/taehwan/ros2_ws/build/plc_interface/build install --record /home/taehwan/ros2_ws/build/plc_interface/install.log --single-version-externally-managed install_data

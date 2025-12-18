@@ -6,7 +6,7 @@ from rclpy.node import Node
 
 from ros_controller_pkg.msg import PlcStatus          # PlcStatus.msg (is_empty, fence_open)
 from std_srvs.srv import SetBool                      # 검사 서비스용
-from std_msgs.msg import Bool                         # door_state용
+from std_msgs.msg import Bool                         # door_state, start_task 용
 
 import serial
 import threading
@@ -18,12 +18,12 @@ BAUD = 9600
 SLAVE_ID = 3
 
 # PLC BIT 주소 매핑
-M0 = 0x0000  # door_state 명령용 (PLC -> STM32)
-M1 = 0x0001  # is_empty용
-M2 = 0x0002  # 검사 요청
-M3 = 0x0003  # 검사 결과
-M4 = 0x0004  # fence_open 상태
-# M5 = 0x0005  # 🔥 더 이상 사용 안 함 (door_open 제거)
+M0  = 0x0000  # door_state 명령용 (PLC -> STM32)
+M1  = 0x0001  # is_empty용
+M2  = 0x0002  # 검사 요청
+M3  = 0x0003  # 검사 결과 (PC -> PLC)
+M4  = 0x0004  # fence_open 상태
+M31 = 0x0011  # 작업 시작 버튼 (M31)  -> /plc/start_task
 
 # coils 메모리 (PC 측 상태 테이블)
 coils = [0] * 256
@@ -59,13 +59,18 @@ class PLCNode(Node):
         # ───── /plc/door_state 퍼블리셔 (M0 → STM32) ─────
         self.pub_door_state = self.create_publisher(Bool, '/plc/door_state', 10)
 
+        # ───── /plc/start_task 퍼블리셔 (M31 → ros_controller → robot_arm) ─────
+        self.pub_start_task = self.create_publisher(Bool, '/plc/start_task', 10)
+
         # ───── 검사 서비스 클라이언트 (/plc/robotarm_detect) ─────
         # ros_controller가 이 서비스 서버가 될 예정
         self.detect_client = self.create_client(SetBool, '/plc/robotarm_detect')
 
-        # ───── M2 엣지검출 및 busy 플래그 ─────
+        # ───── M2 / M30 엣지검출 및 busy 플래그 ─────
         self.m2_prev = 0          # 이전 M2 값 기억
         self.detect_busy = False  # 검사 진행중이면 True
+
+        self.m31_prev = 0         # 작업 시작 버튼(M30) 이전 상태
 
         # ───── Modbus RTU 시리얼 ─────
         self.ser = serial.Serial(
@@ -169,6 +174,17 @@ class PLCNode(Node):
             msg.data = (val == 1)  # 예: True=문 열어, False=문 닫아
             self.pub_door_state.publish(msg)
             self.get_logger().info(f"[PLC] door_state → /plc/door_state : {msg.data}")
+
+        # ── 작업 시작 버튼 (M30, rising edge) ──
+        if addr == M31:
+            if val == 1 and self.m31_prev == 0:
+                msg = Bool()
+                msg.data = True
+                self.pub_start_task.publish(msg)
+                self.get_logger().info(
+                    "[PLC] M31 rising edge → /plc/start_task : True"
+                )
+            self.m31_prev = val
 
         # ── is_empty (M1만 사용) ──
         if addr == M1:
