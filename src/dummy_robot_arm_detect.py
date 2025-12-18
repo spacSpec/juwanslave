@@ -19,17 +19,13 @@ class DummyRobotArmDetect(Node):
         self.get_logger().info("Dummy /robot_arm/detect server READY")
 
     def cb_detect(self, request, response):
-        # 여기서 마음대로 응답 만들 수 있음
         self.get_logger().info("Request from ros_controller received!")
 
-        # ✅ GOOD 보내고 싶으면
-        response.success = True
-        response.message = "GOOD"
+        # 🔥 여기서 응답 값 **꼭** 채워주고
+        response.success = True   # 또는 False
+        response.message = "GOOD" # 또는 "BAD", "ERROR" 등
 
-        # ❌ BAD 보내고 싶으면 위 두 줄 대신:
-        # response.success = True
-        # response.message = "BAD"
-
+        # 🔥 그리고 마지막에 return response 가 꼭 필요함
         return response
 
 

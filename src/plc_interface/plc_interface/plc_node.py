@@ -21,7 +21,7 @@ SLAVE_ID = 3
 M0  = 0x0000  # door_state 명령용 (PLC -> STM32)
 M1  = 0x0001  # is_empty용
 M2  = 0x0002  # 검사 요청
-M3  = 0x0003  # 검사 결과 (PC -> PLC)
+M3  = 0x0014  # 검사 결과 (PC -> PLC)  ※ 통신 테이블에 맞게 설정
 M4  = 0x0004  # fence_open 상태
 M31 = 0x0011  # 작업 시작 버튼 (M31)  -> /plc/start_task
 
@@ -66,11 +66,11 @@ class PLCNode(Node):
         # ros_controller가 이 서비스 서버가 될 예정
         self.detect_client = self.create_client(SetBool, '/plc/robotarm_detect')
 
-        # ───── M2 / M30 엣지검출 및 busy 플래그 ─────
+        # ───── M2 / M31 엣지검출 및 busy 플래그 ─────
         self.m2_prev = 0          # 이전 M2 값 기억
         self.detect_busy = False  # 검사 진행중이면 True
 
-        self.m31_prev = 0         # 작업 시작 버튼(M30) 이전 상태
+        self.m31_prev = 0         # 작업 시작 버튼(M31) 이전 상태
 
         # ───── Modbus RTU 시리얼 ─────
         self.ser = serial.Serial(
@@ -175,7 +175,7 @@ class PLCNode(Node):
             self.pub_door_state.publish(msg)
             self.get_logger().info(f"[PLC] door_state → /plc/door_state : {msg.data}")
 
-        # ── 작업 시작 버튼 (M30, rising edge) ──
+        # ── 작업 시작 버튼 (M31, rising edge) ──
         if addr == M31:
             if val == 1 and self.m31_prev == 0:
                 msg = Bool()
@@ -190,7 +190,7 @@ class PLCNode(Node):
         if addr == M1:
             # M1 = 1 → 물건 있음  → is_empty=False
             # M1 = 0 → 비어 있음 → is_empty=True
-            self.is_empty = not bool(coils[M1])
+            self.is_empty = bool(coils[M1])
 
         # ── fence_open (M4) ──
         if addr == M4:
@@ -233,7 +233,16 @@ class PLCNode(Node):
         future.add_done_callback(self.on_robot_result)
 
     # ==============================
-    # 검사 결과 처리 → PLC M3에 기록
+    # BAD일 때 3초 후 M3 리셋
+    # ==============================
+    def reset_m3_after_delay(self, delay_sec: float):
+        """BAD 결과를 PLC에 3초간만 표시하고 다시 0으로 리셋"""
+        time.sleep(delay_sec)
+        coils[M3] = 0
+        self.get_logger().info(f"[PLC] M3 결과 리셋: {coils[M3]}")
+
+    # ==============================
+    # 검사 결과 처리 → PLC M3에 기록 (3초 펄스)
     # ==============================
     def on_robot_result(self, future):
         try:
@@ -243,9 +252,23 @@ class PLCNode(Node):
                 f"[RobotArm] 검사 결과 success={resp.success}, message='{resp.message}'"
             )
 
-            # GOOD → M3 = 0, BAD → M3 = 1
-            coils[M3] = 0 if resp.success else 1
-            self.get_logger().info(f"[PLC] 검사 결과 M3 코일에 반영: {coils[M3]}")
+            if resp.success:
+                # GOOD → M3 = 0
+                coils[M3] = 0
+                self.get_logger().info(f"[PLC] GOOD 결과, M3 코일 = {coils[M3]}")
+            else:
+                # BAD → M3 = 1 (3초 동안 유지 후 0으로 리셋)
+                coils[M3] = 1
+                self.get_logger().info(
+                    f"[PLC] BAD 결과, M3 코일 = {coils[M3]} (3초 후 자동 리셋)"
+                )
+
+                # 5초 뒤에 M3를 0으로 되돌리는 스레드 실행
+                threading.Thread(
+                    target=self.reset_m3_after_delay,
+                    args=(10.0,),
+                    daemon=True
+                ).start()
 
         except Exception as e:
             self.get_logger().error(f"[ERROR] 검사 결과 처리 실패: {e}")

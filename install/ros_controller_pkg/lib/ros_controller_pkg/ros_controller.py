@@ -3,6 +3,9 @@
 
 import rclpy
 from rclpy.node import Node
+# [수정 1] 멀티스레드 및 콜백 그룹 임포트
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 from std_msgs.msg import Bool, Int32
 from std_srvs.srv import SetBool, Trigger
@@ -16,8 +19,11 @@ from db_ros import insert_ros_quality
 class RosController(Node):
     def __init__(self):
         super().__init__('ros_controller')
+        
+        # [수정 2] 재진입 가능한 콜백 그룹 생성 (중첩 호출 허용)
+        self.cb_group = ReentrantCallbackGroup()
 
-        self.get_logger().info("ROS Controller Started.")
+        self.get_logger().info("ROS Controller Started (Multi-Threaded Mode).")
 
         # ─────────────────────────────────────────────
         # 0) 양품 / 불량 카운트 & M0 상태
@@ -31,14 +37,10 @@ class RosController(Node):
 
         # 카운트 퍼블리셔
         self.pub_good_count = self.create_publisher(
-            Int32,
-            '/ros_controller/good_count',
-            10
+            Int32, '/ros_controller/good_count', 10
         )
         self.pub_bad_count = self.create_publisher(
-            Int32,
-            '/ros_controller/bad_count',
-            10
+            Int32, '/ros_controller/bad_count', 10
         )
 
         # ─────────────────────────────────────────────
@@ -62,7 +64,12 @@ class RosController(Node):
             10
         )
 
-        self.stm_door_client = self.create_client(SetBool, '/plc/door_state')
+        # [수정 3] 클라이언트에 콜백 그룹 적용
+        self.stm_door_client = self.create_client(
+            SetBool, 
+            '/plc/door_state',
+            callback_group=self.cb_group
+        )
         if not self.stm_door_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn(
                 "/plc/door_state SetBool service (STM) not available at startup"
@@ -81,7 +88,8 @@ class RosController(Node):
 
         self.robot_start_client = self.create_client(
             Trigger,
-            '/system/start_work'
+            '/system/start_work',
+            callback_group=self.cb_group
         )
         if not self.robot_start_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn("/system/start_work not available at startup")
@@ -112,9 +120,14 @@ class RosController(Node):
         self.srv_request_dispatch = self.create_service(
             SetBool,
             '/ros_controller/request_dispatch',
-            self.cb_request_dispatch
+            self.cb_request_dispatch,
+            callback_group=self.cb_group
         )
-        self.agv_client = self.create_client(SetBool, '/agv/request_dispatch')
+        self.agv_client = self.create_client(
+            SetBool, 
+            '/agv/request_dispatch',
+            callback_group=self.cb_group
+        )
 
         if not self.agv_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn("/agv/request_dispatch not available at startup")
@@ -123,15 +136,18 @@ class RosController(Node):
         # 6) PLC → ros_controller (service server, SetBool)
         #    ros_controller → RobotArm (service client, Trigger)
         #    /plc/robotarm_detect <-> /robot_arm/detect
-        # ─────────────────────────────────────────────
+        # ─────────────────────────────────────────
+
         self.srv_plc_robotarm_detect = self.create_service(
             SetBool,
             '/plc/robotarm_detect',
-            self.cb_plc_robotarm_detect
+            self.cb_plc_robotarm_detect,
+            callback_group=self.cb_group  # [핵심] 서버에 그룹 적용
         )
         self.robotarm_detect_client = self.create_client(
             Trigger,
-            '/robot_arm/detect'
+            '/robot_arm/detect',
+            callback_group=self.cb_group  # [핵심] 클라이언트에 그룹 적용
         )
 
         if not self.robotarm_detect_client.wait_for_service(timeout_sec=1.0):
@@ -141,11 +157,8 @@ class RosController(Node):
     #  PLC 통합 상태 콜백 (/plc/status_ros)
     # ─────────────────────────────────────────────
     def cb_plc_status(self, msg: PlcStatus):
-        # AGV로 전달 (is_empty, fence_open)
         self.pub_empty.publish(Bool(data=msg.is_empty))
         self.pub_fence_open.publish(Bool(data=msg.fence_open))
-
-        # RobotArm 쪽에도 fence_open 공유
         self.pub_robotarm_fence_open.publish(Bool(data=msg.fence_open))
 
         self.get_logger().info(
@@ -161,7 +174,6 @@ class RosController(Node):
             f"[PLC] /plc/door_state topic received (M0): {msg.data}"
         )
 
-        # 현재 M0 상태 저장
         self.m0_state = bool(msg.data)
 
         # 🔥 M0 상태가 이전과 다를 때만 DB에 한 줄 기록
@@ -180,26 +192,19 @@ class RosController(Node):
                 self.get_logger().error(f"[DB] insert_ros_quality 실패(M0): {e}")
             self._last_m0_logged = self.m0_state
 
-        # ---- 아래는 기존 STM 서비스 호출 로직 ----
         if not msg.data:
-            self.get_logger().info(
-                "[STM] door_state=False → STM 서비스 호출 생략"
-            )
             return
 
         if not self.stm_door_client.service_is_ready():
-            self.get_logger().warn(
-                "/plc/door_state SetBool service (STM) NOT ready"
-            )
+            self.get_logger().warn("/plc/door_state SetBool service (STM) NOT ready")
             return
 
         req = SetBool.Request()
         req.data = True
 
-        self.get_logger().info(
-            "[STM] call /plc/door_state SetBool service (open door)"
-        )
+        self.get_logger().info("[STM] call /plc/door_state SetBool service (open door)")
 
+        # 토픽 콜백에서는 async 써도 됨 (하지만 동기 추천)
         future = self.stm_door_client.call_async(req)
         future.add_done_callback(self._on_stm_door_state_result)
 
@@ -215,11 +220,9 @@ class RosController(Node):
             return
 
         self.get_logger().info(
-            f"[STM] /plc/door_state response: "
-            f"success={res.success}, message='{res.message}'"
+            f"[STM] /plc/door_state response: success={res.success}, message='{res.message}'"
         )
 
-        # STM 결과를 AGV에 door_open으로 전달
         door_open = bool(res.success)
         self.pub_door_open.publish(Bool(data=door_open))
         self.get_logger().info(
@@ -230,19 +233,11 @@ class RosController(Node):
     #  PLC(M30) start_task 토픽 → RobotArm /system/start_work Trigger 브릿지
     # ─────────────────────────────────────────────
     def cb_plc_start_task(self, msg: Bool):
-        """
-        plc_node 가 /plc/start_task (Bool)을 True로 publish 하면
-        ros_controller 가 /system/start_work (Trigger)를 호출해서
-        로봇암 Task_Manager 에 '작업 시작' 명령을 보낸다.
-        """
         self.get_logger().info(
             f"[PLC] /plc/start_task topic received (M30): {msg.data}"
         )
 
         if not msg.data:
-            self.get_logger().info(
-                "[RobotArm] start_task=False → /system/start_work 호출 생략"
-            )
             return
 
         if not self.robot_start_client.service_is_ready():
@@ -250,29 +245,22 @@ class RosController(Node):
             return
 
         req = Trigger.Request()
-        self.get_logger().info(
-            "[RobotArm] call /system/start_work (Trigger)"
-        )
+        self.get_logger().info("[RobotArm] call /system/start_work (Trigger)")
 
         future = self.robot_start_client.call_async(req)
         future.add_done_callback(self._on_start_work_result)
 
     def _on_start_work_result(self, future):
-        """RobotArm /system/start_work Trigger 응답 처리."""
         try:
             res = future.result()
-        except Exception as e:
-            self.get_logger().error(
-                f"[RobotArm] /system/start_work call exception: {e}"
+            self.get_logger().info(
+                f"[RobotArm] /system/start_work response: success={res.success}, message='{res.message}'"
             )
-            return
-
-        self.get_logger().info(
-            f"[RobotArm] /system/start_work response: "
-            f"success={res.success}, message='{res.message}'"
-        )
+        except Exception as e:
+            self.get_logger().error(f"[RobotArm] /system/start_work call exception: {e}")
 
     # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
     #  RobotArm → AGV 서비스 브릿지
     # ─────────────────────────────────────────────
     def cb_request_dispatch(self, request, response):
@@ -289,20 +277,16 @@ class RosController(Node):
             f"[RobotArm] request_dispatch: {request.data} → /agv/request_dispatch"
         )
 
-        future = self.agv_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future)
-
-        if future.result() is not None:
-            agv_result = future.result()
+        # [수정 4] spin_until_future_complete 대신 동기 호출(call) 사용 (데드락 방지)
+        try:
+            agv_result = self.agv_client.call(req)
             self.get_logger().info(
-                f"[AGV] response: success={agv_result.success}, "
-                f"message={agv_result.message}"
+                f"[AGV] response: success={agv_result.success}, message={agv_result.message}"
             )
-
             response.success = agv_result.success
             response.message = agv_result.message
-        else:
-            self.get_logger().error("AGV service call failed")
+        except Exception as e:
+            self.get_logger().error(f"AGV service call failed: {e}")
             response.success = False
             response.message = "AGV service call failed"
 
@@ -320,24 +304,23 @@ class RosController(Node):
             return response
 
         self.get_logger().info(
-            f"[PLC] /plc/robotarm_detect called, data={request.data} "
-            f"→ call /robot_arm/detect (Trigger)"
+            f"[PLC] /plc/robotarm_detect called, data={request.data} → call /robot_arm/detect (Trigger)"
         )
 
         trigger_req = Trigger.Request()
-        future = self.robotarm_detect_client.call_async(trigger_req)
-        rclpy.spin_until_future_complete(self, future)
-
-        if future.result() is None:
-            self.get_logger().error("RobotArm /robot_arm/detect call failed")
+        
+        # [수정 5] 데드락 해결의 핵심! 
+        # spin_until_future_complete 대신 call() 사용
+        try:
+            arm_res = self.robotarm_detect_client.call(trigger_req)
+        except Exception as e:
+            self.get_logger().error(f"RobotArm Call Failed: {e}")
             response.success = False
-            response.message = "RobotArm service call failed"
+            response.message = "RobotArm Call Error"
             return response
 
-        arm_res = future.result()
         self.get_logger().info(
-            f"[RobotArm] /robot_arm/detect response: "
-            f"success={arm_res.success}, message='{arm_res.message}'"
+            f"[RobotArm] /robot_arm/detect response: success={arm_res.success}, message='{arm_res.message}'"
         )
 
         if not arm_res.success:
@@ -347,12 +330,12 @@ class RosController(Node):
 
         quality = (arm_res.message or "").upper()
 
-        # ★ GOOD / BAD 카운트
+        # [수정 6] "DEFECT"를 "BAD"로 인식하도록 추가
         if quality == "GOOD":
             self.good_count += 1
             response.success = True
             response.message = "GOOD"
-        elif quality == "BAD":
+        elif quality == "BAD" or quality == "DEFECT":  # <--- 여기 수정됨!
             self.bad_count += 1
             response.success = False
             response.message = "BAD"
@@ -371,7 +354,6 @@ class RosController(Node):
 
     def _publish_quality_counts(self):
         """GOOD / BAD 누적 개수를 토픽으로 내보내고, DB에도 한 줄 기록."""
-
         msg_g = Int32()
         msg_g.data = self.good_count
         self.pub_good_count.publish(msg_g)
@@ -384,7 +366,6 @@ class RosController(Node):
             f"[COUNT] GOOD={self.good_count}, BAD={self.bad_count}"
         )
 
-        # 🔥 현재 M0 상태 + 카운터를 DB에 기록
         try:
             insert_ros_quality(
                 m0_state=int(self.m0_state),
@@ -402,9 +383,19 @@ class RosController(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = RosController()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    
+    # [수정 7] Single Thread Spin 대신 MultiThreadedExecutor 사용
+    # 이것이 있어야 ReentrantCallbackGroup이 효과를 발휘함
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        node.get_logger().info("Keyboard Interrupt")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':
