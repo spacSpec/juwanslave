@@ -28,14 +28,21 @@ void MX_USB_HOST_Process(void);
 #define TMC_STEP_PIN  GPIO_PIN_13   // STEP
 #define TMC_DIR_PIN   GPIO_PIN_14   // DIR
 
-/* Switches: PD11/10/9/8 (Pull-Up, pressed=LOW) */
+/* MYAGV 입력: PD11/10/9/8 (Pull-Up, active LOW) */
 #define SW_PORT       GPIOD
-#define SW_FWD_15     GPIO_PIN_11   // PD11: 정방향 1.5s
-#define SW_REV_15     GPIO_PIN_10   // PD10: 역방향 1.5s
-#define SW_FWD_05     GPIO_PIN_9    // PD9 : 정방향 0.5s
-#define SW_REV_05     GPIO_PIN_8    // PD8 : 역방향 0.5s
+#define SW_FWD_LONG   GPIO_PIN_11   // PD11: 정방향
+#define SW_REV_LONG   GPIO_PIN_10   // PD10: 역방향
+#define SW_FWD_SHORT  GPIO_PIN_9    // PD9 : 정방향
+#define SW_REV_SHORT  GPIO_PIN_8    // PD8 : 역방향
 
-static int microSecondsDelay = 1000;    // 속도(작을수록 빠름)
+/* 동작 시간 */
+#define LONG_MS   4000
+#define SHORT_MS  1500
+
+/* 스텝 속도 */
+static int microSecondsDelay = 1000;  // 작을수록 빠름
+
+#define DEBOUNCE_MS  30
 /* ========================================================= */
 
 /* ---- DWT us delay ---- */
@@ -54,9 +61,9 @@ static void delay_us(uint32_t us)
   while ((DWT->CYCCNT - start) < ticks) { }
 }
 
-static inline uint8_t sw_pressed(uint16_t pin)
+static inline uint8_t is_pressed(uint16_t pin)
 {
-  return (HAL_GPIO_ReadPin(SW_PORT, pin) == GPIO_PIN_RESET); // Pull-up -> 눌림=LOW
+  return (HAL_GPIO_ReadPin(SW_PORT, pin) == GPIO_PIN_RESET); // Pull-up -> LOW가 들어오면 "신호 ON"
 }
 
 static void step_pulse(void)
@@ -67,42 +74,69 @@ static void step_pulse(void)
   delay_us((uint32_t)microSecondsDelay);
 }
 
-static void run_for_ms(uint32_t durationMs)
+/* ===================== Edge Trigger + Pending ===================== */
+typedef enum {
+  CMD_NONE = 0,
+  CMD_FWD_LONG,
+  CMD_REV_LONG,
+  CMD_FWD_SHORT,
+  CMD_REV_SHORT
+} Cmd_t;
+
+static volatile Cmd_t pending_cmd = CMD_NONE;
+
+static const uint16_t sw_pins[4] = { SW_FWD_LONG, SW_REV_LONG, SW_FWD_SHORT, SW_REV_SHORT };
+static const Cmd_t    sw_cmds[4] = { CMD_FWD_LONG, CMD_REV_LONG, CMD_FWD_SHORT, CMD_REV_SHORT };
+
+static uint8_t  prev_pressed[4] = {0,0,0,0};
+static uint32_t last_edge_ms[4] = {0,0,0,0};
+
+/* 입력을 계속 폴링하면서 "눌림 시작(High->Low)" 엣지만 잡아서 pending에 저장 */
+static void poll_inputs(void)
 {
-  uint32_t start = HAL_GetTick();
-  while ((HAL_GetTick() - start) < durationMs)
+  uint32_t now = HAL_GetTick();
+
+  for (int i = 0; i < 4; i++)
   {
-    step_pulse();
-    MX_USB_HOST_Process();   // USB host 프로젝트면 유지
+    uint8_t pressed = is_pressed(sw_pins[i]);
+
+    /* 눌림 시작 엣지(0->1) */
+    if (pressed && !prev_pressed[i] && (now - last_edge_ms[i] > DEBOUNCE_MS))
+    {
+      pending_cmd = sw_cmds[i];   // 여러 개 오면 마지막 명령으로 덮어쓰기
+      last_edge_ms[i] = now;
+    }
+
+    prev_pressed[i] = pressed;
   }
 }
 
-/* dir: RESET(LOW)=정방향, SET(HIGH)=역방향 (원하면 반대로 바꿔도 됨) */
-static void motor_move(GPIO_PinState dir, uint32_t ms)
+static void execute_cmd(Cmd_t cmd)
 {
-  HAL_GPIO_WritePin(TMC_PORT, TMC_DIR_PIN, dir);
-  run_for_ms(ms);
-}
+  GPIO_PinState dir = GPIO_PIN_RESET;
+  uint32_t ms = 0;
 
-static void wait_release(uint16_t pin)
-{
-  while (sw_pressed(pin))
+  switch (cmd)
   {
+    case CMD_FWD_LONG:   dir = GPIO_PIN_RESET; ms = LONG_MS;  break; // 정방향(DIR LOW)
+    case CMD_REV_LONG:   dir = GPIO_PIN_SET;   ms = LONG_MS;  break; // 역방향(DIR HIGH)
+    case CMD_FWD_SHORT:  dir = GPIO_PIN_RESET; ms = SHORT_MS; break;
+    case CMD_REV_SHORT:  dir = GPIO_PIN_SET;   ms = SHORT_MS; break;
+    default: return;
+  }
+
+  HAL_GPIO_WritePin(TMC_PORT, TMC_DIR_PIN, dir);
+
+  /* 모터 동작 중에도 입력 계속 봐서(짧은 신호도) 놓치지 않게 */
+  uint32_t start = HAL_GetTick();
+  while ((HAL_GetTick() - start) < ms)
+  {
+    step_pulse();
+    poll_inputs();
     MX_USB_HOST_Process();
   }
 }
-
-static void handle_button(uint16_t pin, GPIO_PinState dir, uint32_t ms)
-{
-  if (!sw_pressed(pin)) return;
-
-  HAL_Delay(20);                 // debounce
-  if (!sw_pressed(pin)) return;
-
-  motor_move(dir, ms);           // 동작
-  wait_release(pin);             // 중복 실행 방지(떼기까지 대기)
-  HAL_Delay(20);                 // debounce
-}
+/* ========================================================= */
 
 int main(void)
 {
@@ -127,7 +161,7 @@ int main(void)
   HAL_GPIO_Init(TMC_PORT, &GPIO_InitStruct);
 
   /* 스위치 핀: 입력 Pull-Up */
-  GPIO_InitStruct.Pin = SW_FWD_15 | SW_REV_15 | SW_FWD_05 | SW_REV_05;
+  GPIO_InitStruct.Pin = SW_FWD_LONG | SW_REV_LONG | SW_FWD_SHORT | SW_REV_SHORT;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -145,17 +179,20 @@ int main(void)
 
   while (1)
   {
-    /* 우선순위: PD11 > PD10 > PD9 > PD8 */
-    handle_button(SW_FWD_15, GPIO_PIN_RESET, 3500); // 정 1.5초
-    handle_button(SW_REV_15, GPIO_PIN_SET,   3500); // 역 1.5초
-    handle_button(SW_FWD_05, GPIO_PIN_RESET, 1500); // 정 0.5초
-    handle_button(SW_REV_05, GPIO_PIN_SET,    1500); // 역 0.5초
+    poll_inputs();
+
+    if (pending_cmd != CMD_NONE)
+    {
+      Cmd_t cmd = pending_cmd;
+      pending_cmd = CMD_NONE;
+      execute_cmd(cmd);
+    }
 
     MX_USB_HOST_Process();
   }
 }
 
-/* ===== 아래는 CubeMX가 만든 함수들(네 프로젝트 그대로 유지 가능) ===== */
+/* ===== 아래는 너 프로젝트에 맞게 유지(현재 네 코드 그대로) ===== */
 
 void SystemClock_Config(void)
 {
@@ -227,7 +264,6 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
-  /* (네 프로젝트 기존 설정들 그대로 두면 됨) */
   (void)GPIO_InitStruct;
 }
 
