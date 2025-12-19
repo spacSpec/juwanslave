@@ -21,7 +21,7 @@ SLAVE_ID = 3
 M0  = 0x0000  # door_state 명령용 (PLC -> STM32)
 M1  = 0x0001  # is_empty용
 M2  = 0x0002  # 검사 요청
-M3  = 0x0014  # 검사 결과 (PC -> PLC)  ※ 통신 테이블에 맞게 설정
+M3  = 0x0014  # 검사 결과 (PC -> PLC)
 M4  = 0x0004  # fence_open 상태
 M31 = 0x0011  # 작업 시작 버튼 (M31)  -> /plc/start_task
 
@@ -53,6 +53,10 @@ class PLCNode(Node):
         self.is_empty = True
         self.fence_open = False
 
+        # 마지막으로 publish 했던 상태 (변화 있을 때만 publish)
+        self.last_is_empty = self.is_empty
+        self.last_fence_open = self.fence_open
+
         # ───── /plc/status_ros 퍼블리셔 ─────
         self.pub_status = self.create_publisher(PlcStatus, '/plc/status_ros', 10)
 
@@ -63,14 +67,14 @@ class PLCNode(Node):
         self.pub_start_task = self.create_publisher(Bool, '/plc/start_task', 10)
 
         # ───── 검사 서비스 클라이언트 (/plc/robotarm_detect) ─────
-        # ros_controller가 이 서비스 서버가 될 예정
         self.detect_client = self.create_client(SetBool, '/plc/robotarm_detect')
 
-        # ───── M2 / M31 엣지검출 및 busy 플래그 ─────
-        self.m2_prev = 0          # 이전 M2 값 기억
+        # ───── M2 busy 플래그 ─────
+        self.m2_prev = 0          # 이전 M2 값
         self.detect_busy = False  # 검사 진행중이면 True
 
-        self.m31_prev = 0         # 작업 시작 버튼(M31) 이전 상태
+        # ───── M31 start_task 최소 간격 관리 ─────
+        self.last_start_task_time = 0.0  # 마지막 /plc/start_task 발행 시각 (초)
 
         # ───── Modbus RTU 시리얼 ─────
         self.ser = serial.Serial(
@@ -148,6 +152,8 @@ class PLCNode(Node):
             resp = bytes([SLAVE_ID, 0x01, 0x01, byte_val])
             resp += crc16(resp)
             self.ser.write(resp)
+            # 필요하면 여기서 READ 로그 추가 가능
+            # self.get_logger().info(f"[READ] addr={addr}, count={count}, send=0x{byte_val:02X}")
 
     # ==============================
     # PLC 비트 이벤트 처리
@@ -175,22 +181,25 @@ class PLCNode(Node):
             self.pub_door_state.publish(msg)
             self.get_logger().info(f"[PLC] door_state → /plc/door_state : {msg.data}")
 
-        # ── 작업 시작 버튼 (M31, rising edge) ──
+        # ── 작업 시작 버튼 (M31, level + 최소 1초 간격) ──
         if addr == M31:
-            if val == 1 and self.m31_prev == 0:
-                msg = Bool()
-                msg.data = True
-                self.pub_start_task.publish(msg)
-                self.get_logger().info(
-                    "[PLC] M31 rising edge → /plc/start_task : True"
-                )
-            self.m31_prev = val
+            if val == 1:
+                now = self.get_clock().now().nanoseconds / 1e9  # 초 단위
+                if now - self.last_start_task_time > 1.0:
+                    msg = Bool()
+                    msg.data = True
+                    self.pub_start_task.publish(msg)
+                    self.last_start_task_time = now
+
+                    self.get_logger().info(
+                        "[PLC] M31 ON → /plc/start_task : True (level detect)"
+                    )
 
         # ── is_empty (M1만 사용) ──
         if addr == M1:
             # M1 = 1 → 물건 있음  → is_empty=False
             # M1 = 0 → 비어 있음 → is_empty=True
-            self.is_empty = bool(coils[M1])
+            self.is_empty = not bool(coils[M1])
 
         # ── fence_open (M4) ──
         if addr == M4:
@@ -207,6 +216,14 @@ class PLCNode(Node):
         msg = PlcStatus()
         msg.is_empty = self.is_empty
         msg.fence_open = self.fence_open
+
+        # 값이 안 바뀌었으면 굳이 publish/log 안 함
+        if (msg.is_empty == self.last_is_empty and
+                msg.fence_open == self.last_fence_open):
+            return
+
+        self.last_is_empty = msg.is_empty
+        self.last_fence_open = msg.fence_open
 
         self.pub_status.publish(msg)
 
@@ -236,7 +253,7 @@ class PLCNode(Node):
     # BAD일 때 3초 후 M3 리셋
     # ==============================
     def reset_m3_after_delay(self, delay_sec: float):
-        """BAD 결과를 PLC에 3초간만 표시하고 다시 0으로 리셋"""
+        """BAD 결과를 PLC에 일정 시간 표시하고 다시 0으로 리셋"""
         time.sleep(delay_sec)
         coils[M3] = 0
         self.get_logger().info(f"[PLC] M3 결과 리셋: {coils[M3]}")
@@ -247,7 +264,7 @@ class PLCNode(Node):
     def on_robot_result(self, future):
         try:
             resp = future.result()   # SetBool.Response
-            # resp.success: True → GOOD, False → BAD
+            # resp.success: True → GOOD, False → BAD (현재 가정)
             self.get_logger().info(
                 f"[RobotArm] 검사 결과 success={resp.success}, message='{resp.message}'"
             )
@@ -257,13 +274,13 @@ class PLCNode(Node):
                 coils[M3] = 0
                 self.get_logger().info(f"[PLC] GOOD 결과, M3 코일 = {coils[M3]}")
             else:
-                # BAD → M3 = 1 (3초 동안 유지 후 0으로 리셋)
+                # BAD → M3 = 1 (10초 동안 유지 후 0으로 리셋)
                 coils[M3] = 1
                 self.get_logger().info(
                     f"[PLC] BAD 결과, M3 코일 = {coils[M3]} (3초 후 자동 리셋)"
                 )
 
-                # 5초 뒤에 M3를 0으로 되돌리는 스레드 실행
+                # 10초 뒤에 M3를 0으로 되돌리는 스레드 실행
                 threading.Thread(
                     target=self.reset_m3_after_delay,
                     args=(10.0,),
