@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+PC Modbus Slave + PLC 로그 → MySQL 저장
+
+- PLC BIT:
+    M0   (0x0000) : 안전펜스 ON/OFF
+    M70  (0x0070) : 컨베이어 ON/OFF
+
+- PLC WORD:
+    D100 (0x0020) : 주파수 값
+    D500 (0x0021) : 전류 값
+
+- DB 테이블: dbdb.plc_conveyor_log
+    id (PK, AUTO_INCREMENT)
+    timestamp (DATETIME, DEFAULT CURRENT_TIMESTAMP)
+    running (TINYINT)      -- M70 (컨베이어 ON/OFF)
+    m0_state (TINYINT)     -- M0  (안전펜스 ON/OFF) ← ★ 꼭 컬럼 추가 필요
+    frequency (FLOAT)
+    motor_current (FLOAT)
+"""
+
+import serial
+import threading
+import time
+import mysql.connector  # DB 사용
+
+# ==========================================
+# 슬레이브 PC 기본 설정
+# ==========================================
+PORT = "/dev/ttyUSB0"   # 이 PC의 시리얼 포트 이름 (윈도우면 "COM3" 등으로 변경)
+BAUD = 9600
+SLAVE_ID = 3
+
+# ==========================================
+# BIT / WORD 주소 매핑
+# ==========================================
+COIL_M0_ADDR    = 0x0000    # M0  (BIT)  → 안전펜스 ON/OFF
+COIL_M70_ADDR   = 0x0070    # M70 (BIT)  → 컨베이어 ON/OFF
+REG_D100_ADDR   = 0x0020    # D100 (WORD) → 주파수용
+REG_D500_ADDR   = 0x0021    # D500 (WORD) → 전류용
+
+# ==========================================
+# 메모리 공간
+# ==========================================
+coils = [0] * 1024          # BIT
+holding_regs = [0] * 65536  # WORD
+
+# ==========================================
+# MySQL 설정
+# ==========================================
+DB_HOST = "172.30.1.96"
+DB_USER = "rosuser"
+DB_PASSWORD = "1234"
+DB_NAME = "dbdb"
+
+
+def insert_plc_to_db(m0, m70, d100, d500):
+    """
+    PLC에서 받은 M0/M70/D100/D500 값을 plc_conveyor_log 테이블에 INSERT
+
+    - m0   : 0 또는 1 (안전펜스)
+    - m70  : 0 또는 1 (컨베이어 동작)
+    - d100 : 주파수 원시 값
+    - d500 : 전류  원시 값
+    """
+
+    # 필요하면 여기서 스케일 조정 (예: /10.0, /100.0 등)
+    running       = int(m70)
+    m0_state      = int(m0)
+    frequency     = float(d100)
+    motor_current = float(d500)
+
+    try:
+        conn = mysql.connector.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+        )
+        cursor = conn.cursor()
+
+        sql = """
+            INSERT INTO plc_conveyor_log (running, m0_state, frequency, motor_current)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(sql, (running, m0_state, frequency, motor_current))
+        conn.commit()
+
+        print(
+            f"[DB] INSERT plc_conveyor_log OK  "
+            f"(M0={m0_state}, run={running}, freq={frequency}, cur={motor_current})"
+        )
+
+    except Exception as e:
+        print(f"[DB ERROR] PLC INSERT 실패: {e}")
+
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+
+# ==========================================
+# CRC16 (Modbus RTU)
+# ==========================================
+def crc16(data: bytes) -> bytes:
+    crc = 0xFFFF
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            if crc & 1:
+                crc = (crc >> 1) ^ 0xA001
+            else:
+                crc >>= 1
+    return bytes([crc & 0xFF, (crc >> 8) & 0xFF])
+
+
+# ==========================================
+# 요청 처리 함수
+# ==========================================
+def handle_request(frame: bytes, ser: serial.Serial):
+    if len(frame) < 8:
+        return
+
+    slave = frame[0]
+    func = frame[1]
+
+    # 슬레이브 ID가 다르면 무시
+    if slave != SLAVE_ID:
+        return
+
+    # CRC 체크
+    recv_crc = frame[-2] | (frame[-1] << 8)
+    calc_crc = int.from_bytes(crc16(frame[:-2]), "little")
+    if recv_crc != calc_crc:
+        return
+
+    # 주소/데이터 파싱
+    addr = (frame[2] << 8) | frame[3]
+
+    # --------------------------------------------------
+    # 0x05 - WRITE SINGLE COIL (PLC → PC)
+    # --------------------------------------------------
+    if func == 0x05:
+        value = (frame[4] == 0xFF)  # 0xFF00 이면 ON, 0x0000 이면 OFF
+        coils[addr] = 1 if value else 0
+
+        # Echo 응답
+        resp = frame[:-2]
+        resp += crc16(resp)
+        ser.write(resp)
+
+        print(f"[PLC→PC BIT] WRITE addr={addr:#06x}, value={coils[addr]}")
+
+    # --------------------------------------------------
+    # 0x01 - READ COILS (PC → PLC)
+    # --------------------------------------------------
+    elif func == 0x01:
+        count = (frame[4] << 8) | frame[5]
+        byte_val = 0
+        for i in range(count):
+            if coils[addr + i]:
+                byte_val |= 1 << i
+
+        resp = bytes(
+            [
+                SLAVE_ID,
+                0x01,
+                0x01,  # 바이트 수 (지금은 1바이트 전송)
+                byte_val,
+            ]
+        )
+        resp += crc16(resp)
+        ser.write(resp)
+
+        print(f"[PC→PLC BIT] READ addr={addr:#06x}, send={byte_val:#04x}")
+
+    # --------------------------------------------------
+    # 0x06 - WRITE SINGLE REGISTER (PLC → PC)
+    # --------------------------------------------------
+    elif func == 0x06:
+        value = (frame[4] << 8) | frame[5]
+        holding_regs[addr] = value
+
+        resp = frame[:-2]
+        resp += crc16(resp)
+        ser.write(resp)
+
+        print(f"[PLC→PC WORD] WRITE REG addr={addr:#06x}, value={value}")
+
+
+# ==========================================
+# 시리얼 수신 스레드
+# ==========================================
+def serial_loop(ser: serial.Serial):
+    buf = bytearray()
+
+    while True:
+        if ser.in_waiting:
+            buf += ser.read(ser.in_waiting)
+
+            # 단순 8바이트 프레임 기준으로 처리
+            while len(buf) >= 8:
+                frame = bytes(buf[:8])
+                buf = buf[8:]
+                handle_request(frame, ser)
+
+        time.sleep(0.01)
+
+
+# ==========================================
+# 모니터링 스레드 (M0, M70, D100, D500)
+# ==========================================
+def monitor_loop():
+    prev_m0 = None
+    prev_m70 = None
+    prev_d100 = None
+    prev_d500 = None
+
+    while True:
+        m0 = coils[COIL_M0_ADDR]          # 안전펜스
+        m70 = coils[COIL_M70_ADDR]         # 컨베이어 RUN
+        d100 = holding_regs[REG_D100_ADDR]  # 주파수
+        d500 = holding_regs[REG_D500_ADDR]  # 전류
+
+        # 값이 바뀔 때만 출력 + DB INSERT
+        if (m0, m70, d100, d500) != (prev_m0, prev_m70, prev_d100, prev_d500):
+            print(f"[MONITOR] M0={m0}, M70={m70}, D100={d100}, D500={d500}")
+            prev_m0, prev_m70, prev_d100, prev_d500 = m0, m70, d100, d500
+
+            # DB에 한 줄 기록
+            insert_plc_to_db(m0, m70, d100, d500)
+
+        time.sleep(0.1)  # 100ms마다 체크
+
+
+# ==========================================
+# 메인 실행부
+# ==========================================
+def main():
+    ser = serial.Serial(
+        PORT,
+        BAUD,
+        bytesize=8,
+        parity="N",
+        stopbits=1,
+        timeout=0.05,
+    )
+
+    print("\n===== PC Modbus Slave 시작 =====")
+    print(f"포트: {PORT}, 속도: {BAUD}, 슬레이브ID: {SLAVE_ID}")
+    print(f"DB: host={DB_HOST}, user={DB_USER}, db={DB_NAME}\n")
+
+    # Modbus 수신 스레드
+    threading.Thread(target=serial_loop, args=(ser,), daemon=True).start()
+
+    # 모니터링 스레드
+    threading.Thread(target=monitor_loop, daemon=True).start()
+
+    # 메인 스레드는 대기
+    try:
+        while True:
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        print("\n종료 요청(CTRL+C)")
+    finally:
+        ser.close()
+        print("시리얼 포트 닫음, 프로그램 종료")
+
+
+if __name__ == "__main__":
+    main()
