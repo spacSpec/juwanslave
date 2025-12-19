@@ -36,7 +36,7 @@ void MX_USB_HOST_Process(void);
 #define SW_REV_SHORT  GPIO_PIN_8    // PD8 : 역방향
 
 /* 동작 시간 */
-#define LONG_MS   4000
+#define LONG_MS   3500
 #define SHORT_MS  1500
 
 /* 스텝 속도 */
