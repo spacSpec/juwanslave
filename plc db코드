@@ -1,54 +1,36 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-PC Modbus Slave + PLC 로그 → MySQL 저장
-
-- PLC BIT:
-    M0   (0x0000) : 안전펜스 ON/OFF
-    M70  (0x0070) : 컨베이어 ON/OFF
-
-- PLC WORD:
-    D100 (0x0020) : 주파수 값
-    D500 (0x0021) : 전류 값
-
-- DB 테이블: dbdb.plc_conveyor_log
-    id (PK, AUTO_INCREMENT)
-    timestamp (DATETIME, DEFAULT CURRENT_TIMESTAMP)
-    running (TINYINT)      -- M70 (컨베이어 ON/OFF)
-    m0_state (TINYINT)     -- M0  (안전펜스 ON/OFF) ← ★ 꼭 컬럼 추가 필요
-    frequency (FLOAT)
-    motor_current (FLOAT)
-"""
-
 import serial
 import threading
 import time
-import mysql.connector  # DB 사용
+import mysql.connector  # 🔥 DB 사용
 
 # ==========================================
 # 슬레이브 PC 기본 설정
 # ==========================================
-PORT = "/dev/ttyUSB0"   # 이 PC의 시리얼 포트 이름 (윈도우면 "COM3" 등으로 변경)
+PORT = "/dev/ttyUSB0"   # (윈도우면 "COM3" 등으로 변경)
 BAUD = 9600
 SLAVE_ID = 3
 
 # ==========================================
 # BIT / WORD 주소 매핑
 # ==========================================
-COIL_M0_ADDR    = 0x0000    # M0  (BIT)  → 안전펜스 ON/OFF
-COIL_M70_ADDR   = 0x0070    # M70 (BIT)  → 컨베이어 ON/OFF
-REG_D100_ADDR   = 0x0020    # D100 (WORD) → 주파수용
-REG_D500_ADDR   = 0x0021    # D500 (WORD) → 전류용
+COIL_M0_ADDR  = 0x0000    # M0  → 안전펜스 ON/OFF
+COIL_M4_ADDR  = 0x0004    # M4  → 추가 신호 ON/OFF
+COIL_M70_ADDR = 0x0070    # M70 → 컨베이어 ON/OFF
+
+REG_D100_ADDR = 0x0020    # D100 → 주파수
+REG_D500_ADDR = 0x0021    # D500 → 전류
 
 # ==========================================
 # 메모리 공간
 # ==========================================
-coils = [0] * 1024          # BIT
+coils = [0] * 1024          # BIT (필요한 만큼 넉넉히)
 holding_regs = [0] * 65536  # WORD
 
 # ==========================================
-# MySQL 설정
+# 🔥 MySQL 설정 (DB 서버: 172.30.1.96)
 # ==========================================
 DB_HOST = "172.30.1.96"
 DB_USER = "rosuser"
@@ -56,19 +38,22 @@ DB_PASSWORD = "1234"
 DB_NAME = "dbdb"
 
 
-def insert_plc_to_db(m0, m70, d100, d500):
+def insert_plc_to_db(m0, m4, m70, d100, d500):
     """
-    PLC에서 받은 M0/M70/D100/D500 값을 plc_conveyor_log 테이블에 INSERT
+    PLC에서 받은 M0/M4/M70/D100/D500 값을
+    plc_conveyor_log 테이블에 INSERT
 
-    - m0   : 0 또는 1 (안전펜스)
-    - m70  : 0 또는 1 (컨베이어 동작)
-    - d100 : 주파수 원시 값
-    - d500 : 전류  원시 값
+    - m0  : 0 또는 1 (안전펜스)
+    - m4  : 0 또는 1 (추가 신호)
+    - m70 : 0 또는 1 (컨베이어 RUN)
+    - d100: 주파수 원시 값
+    - d500: 전류 원시 값
     """
 
     # 필요하면 여기서 스케일 조정 (예: /10.0, /100.0 등)
-    running       = int(m70)
     m0_state      = int(m0)
+    m4_state      = int(m4)
+    running       = int(m70)
     frequency     = float(d100)
     motor_current = float(d500)
 
@@ -81,16 +66,18 @@ def insert_plc_to_db(m0, m70, d100, d500):
         )
         cursor = conn.cursor()
 
+        # ★ m4_state 까지 같이 INSERT
         sql = """
-            INSERT INTO plc_conveyor_log (running, m0_state, frequency, motor_current)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO plc_conveyor_log (running, m0_state, m4_state, frequency, motor_current)
+            VALUES (%s, %s, %s, %s, %s)
         """
-        cursor.execute(sql, (running, m0_state, frequency, motor_current))
+        cursor.execute(sql, (running, m0_state, m4_state, frequency, motor_current))
         conn.commit()
 
         print(
             f"[DB] INSERT plc_conveyor_log OK  "
-            f"(M0={m0_state}, run={running}, freq={frequency}, cur={motor_current})"
+            f"(M0={m0_state}, M4={m4_state}, run={running}, "
+            f"freq={frequency}, cur={motor_current})"
         )
 
     except Exception as e:
@@ -100,7 +87,7 @@ def insert_plc_to_db(m0, m70, d100, d500):
         try:
             cursor.close()
             conn.close()
-        except Exception:
+        except:
             pass
 
 
@@ -129,7 +116,7 @@ def handle_request(frame: bytes, ser: serial.Serial):
     slave = frame[0]
     func = frame[1]
 
-    # 슬레이브 ID가 다르면 무시
+    # 슬레이브 ID 체크
     if slave != SLAVE_ID:
         return
 
@@ -137,28 +124,29 @@ def handle_request(frame: bytes, ser: serial.Serial):
     recv_crc = frame[-2] | (frame[-1] << 8)
     calc_crc = int.from_bytes(crc16(frame[:-2]), "little")
     if recv_crc != calc_crc:
+        # CRC 안 맞으면 무시
         return
 
-    # 주소/데이터 파싱
+    # 주소 파싱
     addr = (frame[2] << 8) | frame[3]
 
-    # --------------------------------------------------
+    # ----------------------------------------------------------
     # 0x05 - WRITE SINGLE COIL (PLC → PC)
-    # --------------------------------------------------
+    # ----------------------------------------------------------
     if func == 0x05:
-        value = (frame[4] == 0xFF)  # 0xFF00 이면 ON, 0x0000 이면 OFF
+        value = (frame[4] == 0xFF)
         coils[addr] = 1 if value else 0
 
-        # Echo 응답
+        # 에코 응답
         resp = frame[:-2]
         resp += crc16(resp)
         ser.write(resp)
 
         print(f"[PLC→PC BIT] WRITE addr={addr:#06x}, value={coils[addr]}")
 
-    # --------------------------------------------------
+    # ----------------------------------------------------------
     # 0x01 - READ COILS (PC → PLC)
-    # --------------------------------------------------
+    # ----------------------------------------------------------
     elif func == 0x01:
         count = (frame[4] << 8) | frame[5]
         byte_val = 0
@@ -170,7 +158,7 @@ def handle_request(frame: bytes, ser: serial.Serial):
             [
                 SLAVE_ID,
                 0x01,
-                0x01,  # 바이트 수 (지금은 1바이트 전송)
+                0x01,  # 바이트 수 (지금은 1바이트만 전송)
                 byte_val,
             ]
         )
@@ -179,9 +167,9 @@ def handle_request(frame: bytes, ser: serial.Serial):
 
         print(f"[PC→PLC BIT] READ addr={addr:#06x}, send={byte_val:#04x}")
 
-    # --------------------------------------------------
+    # ----------------------------------------------------------
     # 0x06 - WRITE SINGLE REGISTER (PLC → PC)
-    # --------------------------------------------------
+    # ----------------------------------------------------------
     elif func == 0x06:
         value = (frame[4] << 8) | frame[5]
         holding_regs[addr] = value
@@ -203,7 +191,7 @@ def serial_loop(ser: serial.Serial):
         if ser.in_waiting:
             buf += ser.read(ser.in_waiting)
 
-            # 단순 8바이트 프레임 기준으로 처리
+            # 모드버스 프레임 최소 8바이트 기준으로 잘라서 처리
             while len(buf) >= 8:
                 frame = bytes(buf[:8])
                 buf = buf[8:]
@@ -213,27 +201,29 @@ def serial_loop(ser: serial.Serial):
 
 
 # ==========================================
-# 모니터링 스레드 (M0, M70, D100, D500)
+# 모니터링 스레드 (M0, M4, M70, D100, D500)
 # ==========================================
 def monitor_loop():
     prev_m0 = None
+    prev_m4 = None
     prev_m70 = None
     prev_d100 = None
     prev_d500 = None
 
     while True:
-        m0 = coils[COIL_M0_ADDR]          # 안전펜스
-        m70 = coils[COIL_M70_ADDR]         # 컨베이어 RUN
+        m0   = coils[COIL_M0_ADDR]          # 안전펜스
+        m4   = coils[COIL_M4_ADDR]          # 추가 신호
+        m70  = coils[COIL_M70_ADDR]         # 컨베이어 RUN
         d100 = holding_regs[REG_D100_ADDR]  # 주파수
         d500 = holding_regs[REG_D500_ADDR]  # 전류
 
-        # 값이 바뀔 때만 출력 + DB INSERT
-        if (m0, m70, d100, d500) != (prev_m0, prev_m70, prev_d100, prev_d500):
-            print(f"[MONITOR] M0={m0}, M70={m70}, D100={d100}, D500={d500}")
-            prev_m0, prev_m70, prev_d100, prev_d500 = m0, m70, d100, d500
+        # 값이 바뀔 때만 출력 + DB 인서트
+        if (m0, m4, m70, d100, d500) != (prev_m0, prev_m4, prev_m70, prev_d100, prev_d500):
+            print(f"[MONITOR] M0={m0}, M4={m4}, M70={m70}, D100={d100}, D500={d500}")
+            prev_m0, prev_m4, prev_m70, prev_d100, prev_d500 = m0, m4, m70, d100, d500
 
-            # DB에 한 줄 기록
-            insert_plc_to_db(m0, m70, d100, d500)
+            # 🔥 DB로 한 줄 INSERT
+            insert_plc_to_db(m0, m4, m70, d100, d500)
 
         time.sleep(0.1)  # 100ms마다 체크
 
@@ -261,12 +251,12 @@ def main():
     # 모니터링 스레드
     threading.Thread(target=monitor_loop, daemon=True).start()
 
-    # 메인 스레드는 대기
+    # 메인 스레드는 그냥 대기용
     try:
         while True:
             time.sleep(1.0)
     except KeyboardInterrupt:
-        print("\n종료 요청(CTRL+C)")
+        print("\n종료 요청됨(CTRL+C)")
     finally:
         ser.close()
         print("시리얼 포트 닫음, 프로그램 종료")
