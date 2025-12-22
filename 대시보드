@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-AGV / PLC / 품질 통합 모니터링 대시보드 (Dark Mode)
+AGV / PLC / 품질 통합 모니터링 대시보드 (Dark Mode, 반응형)
 
 Tab 1 : 실시간 대시보드
     - AGV 배터리 게이지 + 최근 로그 5개
     - PLC 주파수 / 전류 게이지 + 최근 로그 5개
     - 양품/불량 카운트 카드 + 파이차트 + 최근 로그 5개
-    - 안전펜스(M0) 상태 카드 + 최근 로그 5개
+    - 셔터(M0) 상태 카드 + 최근 로그 5개
 
 Tab 2 : 전체 로그
     - AGV / PLC / 품질 전체 로그(최근 200개)를 테이블로 확인
@@ -155,28 +155,33 @@ def get_quality_full_logs(limit=200):
     )
 
 # =========================
-#  스타일 (Dark Mode)
+#  스타일 (Dark Mode + 반응형)
 # =========================
 PAGE_STYLE = {
     "fontFamily": "Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
     "backgroundColor": "#121212",
-    "padding": "10px 20px 40px 20px",
+    "padding": "8px 16px 16px 16px",
     "color": "#f5f5f5",
+    "height": "100%",          # 탭 안에서 전체 높이 사용
+    "boxSizing": "border-box",
 }
 
 CARD_STYLE = {
     "backgroundColor": "#1e1e1e",
-    "padding": "16px 20px",
+    "padding": "14px 18px",
     "borderRadius": "14px",
     "boxShadow": "0 2px 10px rgba(0,0,0,0.5)",
     "border": "1px solid #333333",
+    "display": "flex",
+    "flexDirection": "column",
+    "minHeight": 0,
 }
 
 LOG_BOX_STYLE = {
     "backgroundColor": "#181818",
     "borderRadius": "10px",
-    "padding": "8px 10px",
-    "height": "120px",
+    "padding": "6px 8px",
+    "height": "90px",
     "overflowY": "auto",
     "fontSize": "12px",
     "border": "1px solid #2a2a2a",
@@ -239,22 +244,37 @@ def render_log_items(lines):
         for line in lines
     ]
 
-
 # =========================
 #  Dash 앱
 # =========================
-app = Dash(__name__, suppress_callback_exceptions=True)
+app = Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    meta_tags=[
+        {
+            "name": "viewport",
+            "content": "width=device-width, initial-scale=1.0, maximum-scale=1.0",
+        }
+    ],
+)
 app.title = "SPACSPEC Dashboard"
 
 # ---------- 탭별 레이아웃 ----------
 def make_dashboard_layout():
+    row_style = {
+        "display": "flex",
+        "gap": "12px",
+        "flex": "1 1 0",
+        "minHeight": 0,
+    }
+
     return html.Div(
         style=PAGE_STYLE,
         children=[
             # 헤더
             html.Div(
                 style={
-                    "marginBottom": "18px",
+                    "marginBottom": "10px",
                     "display": "flex",
                     "alignItems": "baseline",
                     "justifyContent": "space-between",
@@ -268,174 +288,217 @@ def make_dashboard_layout():
                                     "marginBottom": "0px",
                                     "fontWeight": "700",
                                     "color": "#ffffff",
+                                    "fontSize": "30px",
                                 },
                             ),
                             html.Span(
                                 "AGV · PLC · 품질 통합 모니터링",
-                                style={"color": "#b0bec5"},
+                                style={"color": "#b0bec5", "fontSize": "13px"},
                             ),
                         ]
                     )
                 ],
             ),
 
-            # 1줄: AGV / PLC
+            # 본문: 2행 2열, 화면 높이에 맞게
             html.Div(
-                style={"display": "flex", "gap": "16px", "marginBottom": "16px"},
+                style={
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "gap": "12px",
+                    "height": "calc(100% - 56px)",  # 헤더 높이만큼 빼기
+                    "minHeight": 0,
+                },
                 children=[
-                    # AGV 카드
+                    # 1줄: AGV / PLC
                     html.Div(
-                        style={**CARD_STYLE, "flex": "1.1"},
+                        style=row_style,
                         children=[
-                            html.H3(
-                                "AGV 배터리 (%)",
-                                style={"marginBottom": "8px", "color": "#ffffff"},
-                            ),
+                            # AGV 카드
                             html.Div(
-                                style={
-                                    "display": "flex",
-                                    "justifyContent": "center",
-                                    "marginBottom": "4px",
-                                },
+                                style={**CARD_STYLE, "flex": "1.1", "minWidth": 0},
                                 children=[
+                                    html.H3(
+                                        "AGV 배터리 (%)",
+                                        style={
+                                            "marginBottom": "6px",
+                                            "color": "#ffffff",
+                                            "fontSize": "16px",
+                                        },
+                                    ),
+                                    html.Div(
+                                        style={
+                                            "display": "flex",
+                                            "justifyContent": "center",
+                                            "marginBottom": "2px",
+                                        },
+                                        children=[
+                                            dcc.Graph(
+                                                id="battery_gauge",
+                                                config={"displayModeBar": False},
+                                                style={
+                                                    "height": "190px",
+                                                    "width": "100%",
+                                                },
+                                            ),
+                                        ],
+                                    ),
+                                    html.Div(
+                                        "AGV 로그 (최근 5개)",
+                                        style={
+                                            "marginTop": "4px",
+                                            "fontWeight": "600",
+                                            "fontSize": "12px",
+                                            "color": "#eeeeee",
+                                        },
+                                    ),
+                                    html.Div(id="agv_log_text", style=LOG_BOX_STYLE),
+                                ],
+                            ),
+
+                            # PLC 카드
+                            html.Div(
+                                style={**CARD_STYLE, "flex": "1.1", "minWidth": 0},
+                                children=[
+                                    html.H3(
+                                        "PLC 컨베이어 상태",
+                                        style={
+                                            "marginBottom": "4px",
+                                            "color": "#ffffff",
+                                            "fontSize": "16px",
+                                        },
+                                    ),
+                                    html.Div(
+                                        id="plc_latest_text",
+                                        style={
+                                            "fontSize": "12px",
+                                            "color": "#cfd8dc",
+                                        },
+                                    ),
+                                    html.Div(
+                                        style={
+                                            "display": "flex",
+                                            "gap": "10px",
+                                            "marginTop": "6px",
+                                            "marginBottom": "4px",
+                                        },
+                                        children=[
+                                            html.Div(
+                                                style={"flex": 1, "minWidth": 0},
+                                                children=[
+                                                    dcc.Graph(
+                                                        id="plc_freq_gauge",
+                                                        config={
+                                                            "displayModeBar": False
+                                                        },
+                                                        style={"height": "170px"},
+                                                    )
+                                                ],
+                                            ),
+                                            html.Div(
+                                                style={"flex": 1, "minWidth": 0},
+                                                children=[
+                                                    dcc.Graph(
+                                                        id="plc_curr_gauge",
+                                                        config={
+                                                            "displayModeBar": False
+                                                        },
+                                                        style={"height": "170px"},
+                                                    )
+                                                ],
+                                            ),
+                                        ],
+                                    ),
+                                    html.Div(
+                                        "PLC 로그 (최근 5개)",
+                                        style={
+                                            "marginTop": "4px",
+                                            "fontWeight": "600",
+                                            "fontSize": "12px",
+                                            "color": "#eeeeee",
+                                        },
+                                    ),
+                                    html.Div(id="plc_log_text", style=LOG_BOX_STYLE),
+                                ],
+                            ),
+                        ],
+                    ),
+
+                    # 2줄: 양품/불량 + 셔터(M0)
+                    html.Div(
+                        style=row_style,
+                        children=[
+                            # 품질 카드
+                            html.Div(
+                                style={**CARD_STYLE, "flex": "1.0", "minWidth": 0},
+                                children=[
+                                    html.H3(
+                                        "양품 / 불량",
+                                        style={
+                                            "marginBottom": "6px",
+                                            "color": "#ffffff",
+                                            "fontSize": "16px",
+                                        },
+                                    ),
+                                    html.Div(
+                                        id="quality_counts_card",
+                                        style={"marginBottom": "4px"},
+                                    ),
                                     dcc.Graph(
-                                        id="battery_gauge",
+                                        id="quality_pie",
                                         config={"displayModeBar": False},
-                                        style={"height": "220px", "width": "100%"},
+                                        style={"height": "210px"},
+                                    ),
+                                    html.Div(
+                                        "품질 로그 (최근 5개)",
+                                        style={
+                                            "marginTop": "4px",
+                                            "fontWeight": "600",
+                                            "fontSize": "12px",
+                                            "color": "#eeeeee",
+                                        },
+                                    ),
+                                    html.Div(
+                                        id="quality_log_text",
+                                        style=LOG_BOX_STYLE,
                                     ),
                                 ],
                             ),
-                            html.Div(
-                                "AGV 로그 (최근 5개)",
-                                style={
-                                    "marginTop": "6px",
-                                    "fontWeight": "600",
-                                    "fontSize": "13px",
-                                    "color": "#eeeeee",
-                                },
-                            ),
-                            html.Div(id="agv_log_text", style=LOG_BOX_STYLE),
-                        ],
-                    ),
 
-                    # PLC 카드
-                    html.Div(
-                        style={**CARD_STYLE, "flex": "1.1"},
-                        children=[
-                            html.H3(
-                                "PLC 컨베이어 상태",
-                                style={"marginBottom": "4px", "color": "#ffffff"},
-                            ),
+                            # 셔터 카드 (M0 기준)
                             html.Div(
-                                id="plc_latest_text",
-                                style={"fontSize": "13px", "color": "#cfd8dc"},
-                            ),
-                            html.Div(
-                                style={
-                                    "display": "flex",
-                                    "gap": "16px",
-                                    "marginTop": "8px",
-                                    "marginBottom": "6px",
-                                },
+                                style={**CARD_STYLE, "flex": "1.0", "minWidth": 0},
                                 children=[
-                                    html.Div(
-                                        style={"flex": "1"},
-                                        children=[
-                                            dcc.Graph(
-                                                id="plc_freq_gauge",
-                                                config={"displayModeBar": False},
-                                                style={"height": "190px"},
-                                            )
-                                        ],
+                                    html.H3(
+                                        "셔터",
+                                        style={
+                                            "marginBottom": "6px",
+                                            "color": "#ffffff",
+                                            "fontSize": "16px",
+                                        },
                                     ),
                                     html.Div(
-                                        style={"flex": "1"},
-                                        children=[
-                                            dcc.Graph(
-                                                id="plc_curr_gauge",
-                                                config={"displayModeBar": False},
-                                                style={"height": "190px"},
-                                            )
-                                        ],
+                                        id="fence_status_text",
+                                        style={
+                                            "fontSize": "40px",
+                                            "fontWeight": "900",
+                                            "textAlign": "center",
+                                            "marginTop": "14px",
+                                            "marginBottom": "10px",
+                                        },
                                     ),
+                                    html.Div(
+                                        "M0 로그 (최근 5개)",
+                                        style={
+                                            "marginTop": "6px",
+                                            "fontWeight": "600",
+                                            "fontSize": "12px",
+                                            "color": "#eeeeee",
+                                        },
+                                    ),
+                                    html.Div(id="fence_log_text", style=LOG_BOX_STYLE),
                                 ],
                             ),
-                            html.Div(
-                                "PLC 로그 (최근 5개)",
-                                style={
-                                    "marginTop": "6px",
-                                    "fontWeight": "600",
-                                    "fontSize": "13px",
-                                    "color": "#eeeeee",
-                                },
-                            ),
-                            html.Div(id="plc_log_text", style=LOG_BOX_STYLE),
-                        ],
-                    ),
-                ],
-            ),
-
-            # 2줄: 양품/불량 + 안전펜스
-            html.Div(
-                style={"display": "flex", "gap": "16px"},
-                children=[
-                    # 품질 카드
-                    html.Div(
-                        style={**CARD_STYLE, "flex": "1.0"},
-                        children=[
-                            html.H3(
-                                "양품 / 불량",
-                                style={"marginBottom": "8px", "color": "#ffffff"},
-                            ),
-                            html.Div(
-                                id="quality_counts_card",
-                                style={"marginBottom": "6px"},
-                            ),
-                            dcc.Graph(
-                                id="quality_pie",
-                                config={"displayModeBar": False},
-                                style={"height": "240px"},
-                            ),
-                            html.Div(
-                                "품질 로그 (최근 5개)",
-                                style={
-                                    "marginTop": "6px",
-                                    "fontWeight": "600",
-                                    "fontSize": "13px",
-                                    "color": "#eeeeee",
-                                },
-                            ),
-                            html.Div(id="quality_log_text", style=LOG_BOX_STYLE),
-                        ],
-                    ),
-                    # 안전펜스 카드
-                    html.Div(
-                        style={**CARD_STYLE, "flex": "1.0"},
-                        children=[
-                            html.H3(
-                                "안전펜스 상태 (M0)",
-                                style={"marginBottom": "8px", "color": "#ffffff"},
-                            ),
-                            html.Div(
-                                id="fence_status_text",
-                                style={
-                                    "fontSize": "44px",
-                                    "fontWeight": "900",
-                                    "textAlign": "center",
-                                    "marginTop": "18px",
-                                    "marginBottom": "14px",
-                                },
-                            ),
-                            html.Div(
-                                "M0 로그 (최근 5개)",
-                                style={
-                                    "marginTop": "10px",
-                                    "fontWeight": "600",
-                                    "fontSize": "13px",
-                                    "color": "#eeeeee",
-                                },
-                            ),
-                            html.Div(id="fence_log_text", style=LOG_BOX_STYLE),
                         ],
                     ),
                 ],
@@ -450,14 +513,30 @@ def make_logs_layout():
     return html.Div(
         style=PAGE_STYLE,
         children=[
-            html.H2("전체 로그 보기", style={"marginBottom": "16px", "color": "#ffffff"}),
+            html.H2(
+                "전체 로그 보기",
+                style={
+                    "marginBottom": "10px",
+                    "color": "#ffffff",
+                    "fontSize": "20px",
+                },
+            ),
             html.Div(
-                style={"display": "flex", "flexWrap": "wrap", "gap": "16px"},
+                style={
+                    "display": "flex",
+                    "flexWrap": "nowrap",
+                    "gap": "12px",
+                    "height": "calc(100% - 46px)",  # 제목 높이 제외
+                    "minHeight": 0,
+                },
                 children=[
                     html.Div(
-                        style={**CARD_STYLE, "flex": "1 1 32%"},
+                        style={**CARD_STYLE, "flex": "1 1 0", "minWidth": 0},
                         children=[
-                            html.H3("AGV 배터리 로그", style={"marginBottom": "8px"}),
+                            html.H3(
+                                "AGV 배터리 로그",
+                                style={"marginBottom": "6px", "fontSize": "15px"},
+                            ),
                             dash_table.DataTable(
                                 id="agv_log_table",
                                 columns=[
@@ -467,7 +546,7 @@ def make_logs_layout():
                                 ],
                                 data=[],
                                 style_table={
-                                    "height": "500px",
+                                    "height": "100%",
                                     "overflowY": "auto",
                                     "backgroundColor": "#121212",
                                 },
@@ -478,9 +557,12 @@ def make_logs_layout():
                         ],
                     ),
                     html.Div(
-                        style={**CARD_STYLE, "flex": "1 1 32%"},
+                        style={**CARD_STYLE, "flex": "1 1 0", "minWidth": 0},
                         children=[
-                            html.H3("PLC 컨베이어 로그", style={"marginBottom": "8px"}),
+                            html.H3(
+                                "PLC 컨베이어 로그",
+                                style={"marginBottom": "6px", "fontSize": "15px"},
+                            ),
                             dash_table.DataTable(
                                 id="plc_log_table_full",
                                 columns=[
@@ -491,7 +573,7 @@ def make_logs_layout():
                                 ],
                                 data=[],
                                 style_table={
-                                    "height": "500px",
+                                    "height": "100%",
                                     "overflowY": "auto",
                                     "backgroundColor": "#121212",
                                 },
@@ -502,9 +584,12 @@ def make_logs_layout():
                         ],
                     ),
                     html.Div(
-                        style={**CARD_STYLE, "flex": "1 1 32%"},
+                        style={**CARD_STYLE, "flex": "1 1 0", "minWidth": 0},
                         children=[
-                            html.H3("품질 / M0 로그", style={"marginBottom": "8px"}),
+                            html.H3(
+                                "품질 / M0 로그",
+                                style={"marginBottom": "6px", "fontSize": "15px"},
+                            ),
                             dash_table.DataTable(
                                 id="quality_log_table_full",
                                 columns=[
@@ -515,7 +600,7 @@ def make_logs_layout():
                                 ],
                                 data=[],
                                 style_table={
-                                    "height": "500px",
+                                    "height": "100%",
                                     "overflowY": "auto",
                                     "backgroundColor": "#121212",
                                 },
@@ -533,7 +618,12 @@ def make_logs_layout():
 
 # ---------- 메인 레이아웃 (탭) ----------
 app.layout = html.Div(
-    style={"backgroundColor": "#121212"},
+    style={
+        "backgroundColor": "#121212",
+        "height": "100vh",
+        "display": "flex",
+        "flexDirection": "column",
+    },
     children=[
         dcc.Tabs(
             id="tabs",
@@ -545,13 +635,15 @@ app.layout = html.Div(
                     style={
                         "backgroundColor": "#1e1e1e",
                         "color": "#b0bec5",
-                        "padding": "8px 16px",
+                        "padding": "6px 14px",
+                        "fontSize": "13px",
                     },
                     selected_style={
                         "backgroundColor": "#263238",
                         "color": "#ffffff",
-                        "padding": "8px 16px",
+                        "padding": "6px 14px",
                         "fontWeight": "600",
+                        "fontSize": "13px",
                     },
                 ),
                 dcc.Tab(
@@ -560,18 +652,20 @@ app.layout = html.Div(
                     style={
                         "backgroundColor": "#1e1e1e",
                         "color": "#b0bec5",
-                        "padding": "8px 16px",
+                        "padding": "6px 14px",
+                        "fontSize": "13px",
                     },
                     selected_style={
                         "backgroundColor": "#263238",
                         "color": "#ffffff",
-                        "padding": "8px 16px",
+                        "padding": "6px 14px",
                         "fontWeight": "600",
+                        "fontSize": "13px",
                     },
                 ),
             ],
         ),
-        html.Div(id="tab-content"),
+        html.Div(id="tab-content", style={"flex": "1 1 auto", "minHeight": 0}),
     ],
 )
 
@@ -612,9 +706,8 @@ def update_agv_section(_):
         )
     )
     fig = apply_dark_layout(fig)
-    fig.update_layout(margin=dict(l=20, r=20, t=40, b=20))
+    fig.update_layout(margin=dict(l=20, r=20, t=40, b=10))
 
-    # 로그 5개
     lines = [
         f"[{r['timestamp']}] 배터리={r['battery_level']}%, 전류={r['current']}A"
         for r in rows_log
@@ -665,7 +758,7 @@ def update_plc_section(_):
         )
     )
     freq_fig = apply_dark_layout(freq_fig)
-    freq_fig.update_layout(margin=dict(l=20, r=20, t=40, b=20))
+    freq_fig.update_layout(margin=dict(l=20, r=20, t=40, b=10))
 
     curr_fig = go.Figure(
         go.Indicator(
@@ -676,7 +769,7 @@ def update_plc_section(_):
         )
     )
     curr_fig = apply_dark_layout(curr_fig)
-    curr_fig.update_layout(margin=dict(l=20, r=20, t=40, b=20))
+    curr_fig.update_layout(margin=dict(l=20, r=20, t=40, b=10))
 
     lines = []
     for r in logs:
@@ -690,7 +783,7 @@ def update_plc_section(_):
     return text, freq_fig, curr_fig, log_children
 
 # =========================================================
-# 콜백 3: 품질/안전펜스 카드 + 파이 + 로그
+# 콜백 3: 품질/셔터 카드 + 파이 + 로그
 # =========================================================
 @app.callback(
     Output("quality_counts_card", "children"),
@@ -715,14 +808,13 @@ def update_quality_section(_):
     total = good + bad
     m0 = latest.get("m0_state", 0)
 
-    # 카운트 카드
     counts_card = html.Div(
         style={
             "display": "flex",
             "justifyContent": "space-around",
             "backgroundColor": "#181818",
             "borderRadius": "10px",
-            "padding": "10px 12px",
+            "padding": "8px 10px",
             "border": "1px solid #2a2a2a",
         },
         children=[
@@ -732,7 +824,7 @@ def update_quality_section(_):
                     html.Div("GOOD", style={"color": "#4caf50", "fontWeight": "700"}),
                     html.Div(
                         f"{good}",
-                        style={"fontSize": "26px", "fontWeight": "800"},
+                        style={"fontSize": "24px", "fontWeight": "800"},
                     ),
                 ],
             ),
@@ -742,7 +834,7 @@ def update_quality_section(_):
                     html.Div("BAD", style={"color": "#e57373", "fontWeight": "700"}),
                     html.Div(
                         f"{bad}",
-                        style={"fontSize": "26px", "fontWeight": "800"},
+                        style={"fontSize": "24px", "fontWeight": "800"},
                     ),
                 ],
             ),
@@ -752,14 +844,13 @@ def update_quality_section(_):
                     html.Div("TOTAL", style={"color": "#64b5f6", "fontWeight": "700"}),
                     html.Div(
                         f"{total}",
-                        style={"fontSize": "26px", "fontWeight": "800"},
+                        style={"fontSize": "24px", "fontWeight": "800"},
                     ),
                 ],
             ),
         ],
     )
 
-    # 파이 차트
     fig = go.Figure(
         data=[
             go.Pie(
@@ -771,11 +862,10 @@ def update_quality_section(_):
     )
     fig = apply_dark_layout(fig)
     fig.update_layout(
-        margin={"l": 20, "r": 20, "t": 20, "b": 20},
+        margin={"l": 10, "r": 10, "t": 10, "b": 10},
         legend=dict(orientation="h", y=-0.1),
     )
 
-    # 품질 로그
     q_lines = []
     for r in logs:
         m0_str = "OPEN" if r["m0_state"] else "CLOSED"
@@ -784,14 +874,12 @@ def update_quality_section(_):
         )
     quality_log_children = render_log_items(q_lines)
 
-    # 안전펜스 상태 텍스트
     fence_status = (
         html.Span("OPEN", style={"color": "#4caf50"})
         if m0 == 1
         else html.Span("CLOSED", style={"color": "#ef5350"})
     )
 
-    # 펜스 로그 (같은 데이터 재사용)
     fence_log_children = render_log_items(q_lines)
 
     return counts_card, fig, quality_log_children, fence_status, fence_log_children
@@ -815,5 +903,4 @@ def update_full_logs(_):
 #  메인
 # =========================
 if __name__ == "__main__":
-    # Dash 최신 버전: run_server 대신 run 사용
     app.run(debug=True, host="0.0.0.0", port=8050)
