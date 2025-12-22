@@ -1,0 +1,4 @@
+Invoking command in '/home/taehwan/ros2_ws/build/ros_controller_pkg': /usr/bin/cmake --build /home/taehwan/ros2_ws/build/ros_controller_pkg -- -j12 -l12
+Invoked command in '/home/taehwan/ros2_ws/build/ros_controller_pkg' returned '0': /usr/bin/cmake --build /home/taehwan/ros2_ws/build/ros_controller_pkg -- -j12 -l12
+Invoking command in '/home/taehwan/ros2_ws/build/ros_controller_pkg': /usr/bin/cmake --install /home/taehwan/ros2_ws/build/ros_controller_pkg
+Invoked command in '/home/taehwan/ros2_ws/build/ros_controller_pkg' returned '0': /usr/bin/cmake --install /home/taehwan/ros2_ws/build/ros_controller_pkg
