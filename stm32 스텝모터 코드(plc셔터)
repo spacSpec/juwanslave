@@ -7,125 +7,120 @@
   */
 /* USER CODE END Header */
 
-/* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_host.h"
-
-/* Private includes ----------------------------------------------------------*/
 #include <string.h>
 
 /* Private variables ---------------------------------------------------------*/
-I2C_HandleTypeDef hi2c1;
-I2S_HandleTypeDef hi2s3;
-SPI_HandleTypeDef hspi1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+// ===== TMC2209 핀 (너가 말한대로) =====
+#define TMC_PORT      GPIOD
+#define TMC_EN_PIN    GPIO_PIN_12   // EN (LOW=Enable)
+#define TMC_STEP_PIN  GPIO_PIN_13   // STEP
+#define TMC_DIR_PIN   GPIO_PIN_14   // DIR
 
-// Stepper motor 4-step sequence
-const uint8_t STEP_SEQ[4][4] = {
-    {1,0,1,0},
-    {0,1,1,0},
-    {0,1,0,1},
-    {1,0,0,1}
-};
+// ===== 동작 파라미터(여기만 바꾸면 됨) =====
+#define RUN_MS        5500          // 정/역 회전 시간(3초)
+#define WAIT_MS       20000         // 가운데 정지 시간(20초)
+#define STEP_DELAY_US 800          // 스텝 속도(작을수록 빠름) : HIGH 1000us + LOW 1000us = 500Hz
 
-int stepIndex = 0;
-uint8_t rxData = 0;
-uint8_t command = 0;
-
+static uint8_t rxData = 0;
+static volatile uint8_t command = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_I2C1_Init(void);
-static void MX_I2S3_Init(void);
-static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
 void MX_USB_HOST_Process(void);
 
-/* USER CODE BEGIN PFP */
-void Stepper_Set(uint8_t, uint8_t, uint8_t, uint8_t);
-void Stepper_Forward(void);
-void Stepper_Backward(void);
-void Stepper_Run_Open(void);
-/* USER CODE END PFP */
-
-
 /* USER CODE BEGIN 0 */
-
-// GPIO 출력으로 스텝모터 코일 제어
-void Stepper_Set(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
+/* ---- DWT us delay (정확한 us 지연) ---- */
+static void DWT_Delay_Init(void)
 {
-    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, a ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, b ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, c ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, d ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 }
 
-void Stepper_Forward(void)
+static void delay_us(uint32_t us)
 {
-    Stepper_Set(
-        STEP_SEQ[stepIndex][0],
-        STEP_SEQ[stepIndex][1],
-        STEP_SEQ[stepIndex][2],
-        STEP_SEQ[stepIndex][3]
-    );
-    stepIndex = (stepIndex + 1) % 4;
+  uint32_t ticks_per_us = HAL_RCC_GetHCLKFreq() / 1000000U;
+  uint32_t start = DWT->CYCCNT;
+  uint32_t ticks = us * ticks_per_us;
+  while ((DWT->CYCCNT - start) < ticks) { }
 }
 
-void Stepper_Backward(void)
+/* ---- TMC2209 제어 ---- */
+static inline void tmc_enable(uint8_t en)
 {
-    stepIndex = (stepIndex - 1 + 4) % 4;
-
-    Stepper_Set(
-        STEP_SEQ[stepIndex][0],
-        STEP_SEQ[stepIndex][1],
-        STEP_SEQ[stepIndex][2],
-        STEP_SEQ[stepIndex][3]
-    );
+  // en=1 -> Enable(홀드 가능), en=0 -> Disable(힘 빠짐)
+  HAL_GPIO_WritePin(TMC_PORT, TMC_EN_PIN, en ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
 
-// UART 인터럽트 (ESP32 → STM32 신호 수신)
+static inline void tmc_set_dir(GPIO_PinState dir)
+{
+  HAL_GPIO_WritePin(TMC_PORT, TMC_DIR_PIN, dir);
+}
+
+static inline void tmc_step_pulse(void)
+{
+  HAL_GPIO_WritePin(TMC_PORT, TMC_STEP_PIN, GPIO_PIN_SET);
+  delay_us(STEP_DELAY_US);
+  HAL_GPIO_WritePin(TMC_PORT, TMC_STEP_PIN, GPIO_PIN_RESET);
+  delay_us(STEP_DELAY_US);
+}
+
+static void tmc_run_ms(GPIO_PinState dir, uint32_t ms)
+{
+  tmc_enable(1);       // Enable(홀드 가능 상태)
+  tmc_set_dir(dir);
+
+  uint32_t start = HAL_GetTick();
+  while ((HAL_GetTick() - start) < ms)
+  {
+    tmc_step_pulse();
+    MX_USB_HOST_Process();
+  }
+}
+
+/* 'O' 명령 들어오면 실행: 정방향 3초 -> 20초 정지(EN OFF) -> 역방향 3초 -> open\n */
+static void Stepper_Run_Open_TMC2209(void)
+{
+  // 정방향 (DIR LOW가 정방향일지 반대일지는 배선/모터에 따라 다름)
+  tmc_run_ms(GPIO_PIN_SET, RUN_MS);
+
+  // 가운데 대기: L298N에서 코일 OFF 하던 것처럼, 여기서는 EN을 꺼서 힘을 뺌
+  tmc_enable(0); // Disable(홀드 해제)
+  uint32_t wstart = HAL_GetTick();
+  while ((HAL_GetTick() - wstart) < WAIT_MS)
+  {
+    MX_USB_HOST_Process();
+  }
+
+  // 역방향
+  tmc_run_ms(GPIO_PIN_RESET, RUN_MS);
+
+  // 끝난 뒤 홀드 유지하고 싶으면 EN을 켜둔 채로 끝(지금은 enable=1 상태로 끝남)
+  // 힘 빼고 끝내고 싶으면 아래 한 줄 켜:
+  // tmc_enable(0);
+
+  char msg[] = "open\n";
+  HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 100);
+}
+
+/* UART 인터럽트 콜백 (ESP32 -> STM32 1바이트 명령 수신) */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    if (huart->Instance == USART2)
-    {
-        command = rxData;
-        HAL_UART_Receive_IT(&huart2, &rxData, 1);  // 재시작
-    }
+  if (huart->Instance == USART2)
+  {
+    command = rxData;
+    HAL_UART_Receive_IT(&huart2, &rxData, 1);
+  }
 }
-
-/*
- * 핵심 동작:
- * 3초 정방향 → 20초 정지(코일 OFF) → 3초 역방향 → OK 전송
- */
-void Stepper_Run_Open()
-{
-    // ===== 1) Forward 3 seconds =====
-    for (int i = 0; i < 400; i++) {   // 600 × 5ms = 3000ms
-        Stepper_Forward();
-        HAL_Delay(5);
-    }
-
-    // ===== 2) STOP 20 seconds (Coils OFF) =====
-    Stepper_Set(0,0,0,0);
-    HAL_Delay(20000);
-
-    // ===== 3) Backward 3 seconds =====
-    for (int i = 0; i < 400; i++) {
-        Stepper_Backward();
-        HAL_Delay(5);
-    }
-
-    // ===== 4) Send OK to ESP32 =====
-    char msg[] = "open\n";
-    HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 100);
-}
-
 /* USER CODE END 0 */
-
 
 int main(void)
 {
@@ -136,54 +131,55 @@ int main(void)
   MX_USB_HOST_Init();
   MX_USART2_UART_Init();
 
+  DWT_Delay_Init();
+
+  // 초기 출력 상태
+  HAL_GPIO_WritePin(TMC_PORT, TMC_STEP_PIN, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(TMC_PORT, TMC_DIR_PIN, GPIO_PIN_RESET);
+  tmc_enable(0); // 기본은 힘 빼고 시작(원하면 1로 바꿔도 됨)
+
   HAL_UART_Receive_IT(&huart2, &rxData, 1);
 
   while (1)
   {
     MX_USB_HOST_Process();
 
-    if (command == 'O')   // ESP32 → STM32 명령 수신
+    if (command == 'O')
     {
-        Stepper_Run_Open();
-        command = 0;
+      command = 0;
+      Stepper_Run_Open_TMC2209();
     }
   }
 }
 
-
-/* -----------------------------------------------------------------------
-   CubeMX Auto-generated Functions (수정 금지)
-   ----------------------------------------------------------------------- */
+/* ===== 아래는 최소 동작용 init들 (필요하면 네 프로젝트 것 유지해도 됨) ===== */
 
 void SystemClock_Config(void)
 {
-    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-    __HAL_RCC_PWR_CLK_ENABLE();
-    __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+  __HAL_RCC_PWR_CLK_ENABLE();
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-    RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-    RCC_OscInitStruct.PLL.PLLM = 8;
-    RCC_OscInitStruct.PLL.PLLN = 336;
-    RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-    RCC_OscInitStruct.PLL.PLLQ = 7;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 336;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 7;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) { Error_Handler(); }
 
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-        Error_Handler();
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
-                                  RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
-    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
-
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
-        Error_Handler();
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK) { Error_Handler(); }
 }
 
 static void MX_USART2_UART_Init(void)
@@ -196,9 +192,7 @@ static void MX_USART2_UART_Init(void)
   huart2.Init.Mode = UART_MODE_TX_RX;
   huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-
-  if (HAL_UART_Init(&huart2) != HAL_OK)
-    Error_Handler();
+  if (HAL_UART_Init(&huart2) != HAL_OK) { Error_Handler(); }
 }
 
 static void MX_GPIO_Init(void)
@@ -207,11 +201,11 @@ static void MX_GPIO_Init(void)
 
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
-  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
+  // TMC2209 제어핀: PD12/13/14 출력
+  GPIO_InitStruct.Pin = TMC_EN_PIN | TMC_STEP_PIN | TMC_DIR_PIN;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 }
 
