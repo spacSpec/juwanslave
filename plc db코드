@@ -20,8 +20,9 @@ COIL_M0_ADDR  = 0x0000    # M0  → 안전펜스 ON/OFF
 COIL_M4_ADDR  = 0x0004    # M4  → 추가 신호 ON/OFF
 COIL_M70_ADDR = 0x0070    # M70 → 컨베이어 ON/OFF
 
-REG_D100_ADDR = 0x0020    # D100 → 주파수
-REG_D500_ADDR = 0x0021    # D500 → 전류
+REG_D2_ADDR   = 0x0011    # D00002 (WORD, Modbus: 0x40011) → 재고 수량
+REG_D100_ADDR = 0x0020    # D100   (WORD, Modbus: 0x40020) → 주파수
+REG_D500_ADDR = 0x0021    # D500   (WORD, Modbus: 0x40021) → 전류
 
 # ==========================================
 # 메모리 공간
@@ -38,22 +39,24 @@ DB_PASSWORD = "1234"
 DB_NAME = "dbdb"
 
 
-def insert_plc_to_db(m0, m4, m70, d100, d500):
+def insert_plc_to_db(m0, m4, m70, d2_stock, d100, d500):
     """
-    PLC에서 받은 M0/M4/M70/D100/D500 값을
+    PLC에서 받은 M0/M4/M70/D00002/D100/D500 값을
     plc_conveyor_log 테이블에 INSERT
 
-    - m0  : 0 또는 1 (안전펜스)
-    - m4  : 0 또는 1 (추가 신호)
-    - m70 : 0 또는 1 (컨베이어 RUN)
-    - d100: 주파수 원시 값
-    - d500: 전류 원시 값
+    - m0       : 0 또는 1 (안전펜스)
+    - m4       : 0 또는 1 (셔터 등 추가 신호)
+    - m70      : 0 또는 1 (컨베이어 RUN)
+    - d2_stock : 재고 수량 (D00002)
+    - d100     : 주파수 원시 값
+    - d500     : 전류 원시 값
     """
 
     # 필요하면 여기서 스케일 조정 (예: /10.0, /100.0 등)
     m0_state      = int(m0)
     m4_state      = int(m4)
     running       = int(m70)
+    stock_qty     = int(d2_stock)      # 재고 수량
     frequency     = float(d100)
     motor_current = float(d500)
 
@@ -66,18 +69,22 @@ def insert_plc_to_db(m0, m4, m70, d100, d500):
         )
         cursor = conn.cursor()
 
-        # ★ m4_state 까지 같이 INSERT
+        # ★ stock_qty 컬럼까지 함께 INSERT
         sql = """
-            INSERT INTO plc_conveyor_log (running, m0_state, m4_state, frequency, motor_current)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO plc_conveyor_log
+                (running, m0_state, m4_state, stock_qty, frequency, motor_current)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """
-        cursor.execute(sql, (running, m0_state, m4_state, frequency, motor_current))
+        cursor.execute(
+            sql,
+            (running, m0_state, m4_state, stock_qty, frequency, motor_current),
+        )
         conn.commit()
 
         print(
             f"[DB] INSERT plc_conveyor_log OK  "
-            f"(M0={m0_state}, M4={m4_state}, run={running}, "
-            f"freq={frequency}, cur={motor_current})"
+            f"(M0={m0_state}, M4={m4_state}, RUN={running}, "
+            f"STOCK={stock_qty}, FREQ={frequency}, CUR={motor_current})"
         )
 
     except Exception as e:
@@ -134,7 +141,7 @@ def handle_request(frame: bytes, ser: serial.Serial):
     # 0x05 - WRITE SINGLE COIL (PLC → PC)
     # ----------------------------------------------------------
     if func == 0x05:
-        value = (frame[4] == 0xFF)
+        value = frame[4] == 0xFF
         coils[addr] = 1 if value else 0
 
         # 에코 응답
@@ -201,29 +208,42 @@ def serial_loop(ser: serial.Serial):
 
 
 # ==========================================
-# 모니터링 스레드 (M0, M4, M70, D100, D500)
+# 모니터링 스레드 (M0, M4, M70, D2, D100, D500)
 # ==========================================
 def monitor_loop():
     prev_m0 = None
     prev_m4 = None
     prev_m70 = None
+    prev_d2 = None
     prev_d100 = None
     prev_d500 = None
 
     while True:
         m0   = coils[COIL_M0_ADDR]          # 안전펜스
-        m4   = coils[COIL_M4_ADDR]          # 추가 신호
+        m4   = coils[COIL_M4_ADDR]          # 셔터/추가 신호
         m70  = coils[COIL_M70_ADDR]         # 컨베이어 RUN
+        d2   = holding_regs[REG_D2_ADDR]    # 재고 수량 (D00002)
         d100 = holding_regs[REG_D100_ADDR]  # 주파수
         d500 = holding_regs[REG_D500_ADDR]  # 전류
 
         # 값이 바뀔 때만 출력 + DB 인서트
-        if (m0, m4, m70, d100, d500) != (prev_m0, prev_m4, prev_m70, prev_d100, prev_d500):
-            print(f"[MONITOR] M0={m0}, M4={m4}, M70={m70}, D100={d100}, D500={d500}")
-            prev_m0, prev_m4, prev_m70, prev_d100, prev_d500 = m0, m4, m70, d100, d500
+        if (m0, m4, m70, d2, d100, d500) != (
+            prev_m0,
+            prev_m4,
+            prev_m70,
+            prev_d2,
+            prev_d100,
+            prev_d500,
+        ):
+            print(
+                f"[MONITOR] M0={m0}, M4={m4}, M70={m70}, "
+                f"D2={d2}, D100={d100}, D500={d500}"
+            )
+            prev_m0, prev_m4, prev_m70 = m0, m4, m70
+            prev_d2, prev_d100, prev_d500 = d2, d100, d500
 
-            # 🔥 DB로 한 줄 INSERT
-            insert_plc_to_db(m0, m4, m70, d100, d500)
+            # 🔥 DB에 한 줄 INSERT
+            insert_plc_to_db(m0, m4, m70, d2, d100, d500)
 
         time.sleep(0.1)  # 100ms마다 체크
 
