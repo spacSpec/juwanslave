@@ -4,7 +4,7 @@ footprint: [[0.23, 0.06], [0.23, -0.06], [-0.08, -0.06], [-0.08, 0.06]] #지게�
 footprint_padding: 0.03
 
 
-transform_tolerance: 0.2
+transform_tolerance: 0.5
 
 always_send_full_costmap: true
 
@@ -19,7 +19,7 @@ obstacle_layer:
   track_unknown_space: true
   laser_scan_sensor:
     data_type: LaserScan
-    topic: /scan
+    topic: /scan_filtered
     marking: true
     clearing: true
 

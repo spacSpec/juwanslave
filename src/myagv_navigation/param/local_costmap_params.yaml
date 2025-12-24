@@ -8,9 +8,9 @@ local_costmap:
    width: 3.0
    height: 3.0
    resolution: 0.02
-   transform_tolerance: 1.2
+   transform_tolerance: 0.8
    # inflation_radius: 0.02
-   inflation_radius: 0.4
+   inflation_radius: 0.45
    #map_type: costmap
 
    plugins:

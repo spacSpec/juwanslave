@@ -16,6 +16,9 @@ class AgvTaskManager:
         rospy.init_node('agv_task_manager', anonymous=False)
         rospy.loginfo("🚀 AGV Task Manager: Full Task & Battery Logic Integrated")
 
+        # --- TF 리스너 초기화 (연산 대기용) ---
+        self.tf_listener = tf.TransformListener()
+
         # --- 상태 변수 ---
         self.stage = "IDLE"
         self.is_paused = False
@@ -33,8 +36,7 @@ class AgvTaskManager:
         self.pos_final = (9.28, -1.21, 98.04)       
         self.pos_home = (6.37, -1.18, 109.66)
         self.pos_batt_final = (10.30, -0.22, 16.06)       
-        self.pos_after_unload = (10.15, -1.53, 104.98) 
-        self.pos_waypoint_before_door = (7.08, -2.20, -67.99)
+        self.pos_after_unload = (9.87, -1.55, 108.16) 
 
         # --- Subscriber (최우선 등록) ---
         rospy.Subscriber('/battery_percent', Int8, self.cb_battery)
@@ -64,6 +66,9 @@ class AgvTaskManager:
         rospy.sleep(2.0)
         rospy.loginfo("✅ 시스템 준비 완료")
 
+        # __init__ 함수 마지막 부분에 추가
+        threading.Thread(target=self.monitor_system, daemon=True).start()
+
     def connect_qr_service(self):
         try:
             rospy.wait_for_service('/qr_task', timeout=1.0)
@@ -76,10 +81,10 @@ class AgvTaskManager:
     def cb_battery(self, msg):
         self.battery_level = msg.data
 
-        # if self.last_logged_batt is None or self.battery_level != self.last_logged_batt:
-        #     # 별도 스레드로 실행하여 로봇 동작에 방해를 주지 않음
-        #     threading.Thread(target=insert_agv_battery, args=(self.battery_level,)).start()
-        #     self.last_logged_batt = self.battery_level
+        if self.last_logged_batt is None or self.battery_level != self.last_logged_batt:
+            # 별도 스레드로 실행하여 로봇 동작에 방해를 주지 않음
+            threading.Thread(target=insert_agv_battery, args=(self.battery_level,)).start()
+            self.last_logged_batt = self.battery_level
         
         # IDLE 상태에서만 배터리 부족 시 충전소 이동 시작
         if self.stage == "IDLE" and self.battery_level <= 10:
@@ -88,10 +93,20 @@ class AgvTaskManager:
             self.send_goal(*self.pos_door_in)
         
         # 충전 중(IDLE_CHARGING)에 배터리가 차면 복귀
-        elif self.stage == "IDLE_CHARGING" and self.battery_level >= 20:
+        elif self.stage == "IDLE_CHARGING" and self.battery_level > 10:
             rospy.loginfo(f"🔋 충전 완료({self.battery_level}%): 복귀 시작")
             self.stage = "BATT_RET_GO_OUT" 
             self.send_goal(*self.pos_door_out_return)
+
+    # [수정] TF 연산 대기 함수 (공용)
+    def wait_for_transform(self, target="base_footprint", source="imu_link", timeout=0.1):
+        """ TF 연산이 준비될 때까지 기다립니다. 실패 시 AGV 정지 유도. """
+        try:
+            self.tf_listener.waitForTransform(target, source, rospy.Time(0), rospy.Duration(timeout))
+            return True
+        except (tf.Exception, tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            rospy.logwarn_throttle(2, f"⏳ TF 연산 대기 중... ({source} -> {target})")
+            return False
 
     # ===============================
     # 🎯 메인 사이클 제어 (도착 결과)
@@ -100,21 +115,10 @@ class AgvTaskManager:
         if self.is_paused or msg.status.status != 3: return
         rospy.loginfo(f"🎯 도착 완료: {self.stage}")
 
-        # --- 경유지 도착 로직 ---
-        if self.stage == "GO_WAYPOINT_BEFORE_DOOR":
-            rospy.loginfo("📍 경유지 도착 완료. 이제 문 안쪽 정지선으로 이동합니다.")
-            self.stage = "GO_DOOR_INNER"
-            self.send_goal(*self.pos_door_in)
-            return
-
         # 1. 문 안쪽 도착 (일반/충전 공통)
         if self.stage in ["GO_DOOR_INNER", "BATT_GO_DOOR_INNER"]:
             self.stage = "QR_DOOR_INNER" if self.stage == "GO_DOOR_INNER" else "BATT_QR_DOOR_INNER"
             self._call_qr_task_async(target_id=4)
-
-        elif self.stage == "BATT_GO_HOME_ONLY":
-            rospy.loginfo("🏁 충전 후 홈 복귀 완료. 하역 없이 작업을 종료합니다.")
-            self.stage = "IDLE"
 
         # 2. 문 밖으로 전진 완료
         elif self.stage == "GO_DOOR_OUT":
@@ -131,26 +135,16 @@ class AgvTaskManager:
         # 5. 충전 스테이션 도착
         elif self.stage == "BATT_GO_FINAL":
             self.stage = "BATT_QR_FINAL"; self._call_qr_task_async(target_id=2)
-            
 
         # [수정] 중간 좌표 도착 시 빈 박스 가지러가기
         elif self.stage == "GO_AFTER_UNLOAD":
             rospy.loginfo("🎯 중간 좌표 도착. 2번 QR 접근 및 적재 준비를 시작합니다.")
             self.stage = "QR_RELOAD_TASK" # 새로운 상태명: 재적재 작업
-            # self._call_qr_task_async(target_id=2) # 2번 QR 호출
-            self._call_qr_task_async(target_id=1) # 2번 QR 호출
+            self._call_qr_task_async(target_id=2) # 2번 QR 호출
 
         # 6. 하역 완료 후 복귀 좌표 도착 (일반/충전후 공통)
-        elif self.stage in ["GO_DOOR_OUT_RETURN"]:
-            self.stage = "QR_DOOR_OUT_RETURN"; self._call_qr_task_async(target_id=34)
-
-
-        # [수정] 충전 후 복귀 좌표 도착 시 전용 상태로 전환
-        elif self.stage == "BATT_RET_GO_OUT":
-            rospy.loginfo("🔋 충전 복귀 중: 문 밖 도착. 문 열림 대기 후 바로 홈으로 이동합니다.")
-            self.stage = "BATT_WAIT_DOOR_IN"  # 새로운 상태 정의
-            self._call_qr_task_async(target_id=34) # QR 인식은 동일하게 수행
-        
+        elif self.stage in ["GO_DOOR_OUT_RETURN", "BATT_RET_GO_OUT"]:
+            self.stage = "QR_DOOR_OUT_RETURN"; self._call_qr_task_async(target_id=3)
 
         # 7. 집(Home) 좌표 도착 시 실행되는 새로운 시퀀스
         elif self.stage == "GO_HOME":
@@ -178,19 +172,18 @@ class AgvTaskManager:
         while self.stage == "QR_HOME_WAITING" and not rospy.is_shutdown():
             rospy.sleep(0.1)
 
-        #미세 조정
-        self.move_forward_teleop(0.1, 0.5)
 
         # 물건 내리기
         self.pub_forklift1.publish(Bool(data=False))
         self.wait_for_forklift()
-        self.smart_sleep(4.0)
+        self.smart_sleep(3.0)
+        # self.move_forward_teleop(0.1, 2.0)
         self.move_backward_imu(0.1, 2.0); 
 
         # 리프트 업
         self.pub_forklift1.publish(Bool(data=True))
         self.wait_for_forklift()
-        self.smart_sleep(4.0)
+        self.smart_sleep(3.0)
 
 
         # # 2. 지게차 다운
@@ -263,27 +256,13 @@ class AgvTaskManager:
 
         # 5. 문/게이트 대기 단계 전환
         elif self.stage == "QR_DOOR_INNER": 
-            self.cancel_pub.publish(GoalID())
-            rospy.loginfo("🚪 문 안쪽 QR 완료: 문 열림 대기 중...")
             self.stage = "WAIT_DOOR_OUT"
             return
         elif self.stage == "BATT_QR_DOOR_INNER": 
-            self.cancel_pub.publish(GoalID())
-            rospy.loginfo("🔋 배터리행 문 안쪽 QR 완료: 문 열림 대기 중...")
             self.stage = "BATT_WAIT_DOOR_OUT"
             return
         elif self.stage == "QR_DOOR_OUT_RETURN": 
-            self.cancel_pub.publish(GoalID())
-            rospy.loginfo("🚪 복귀 문 밖 QR 완료: 문 열림 대기 중...")
             self.stage = "WAIT_DOOR_IN"
-            return
-        
-        # [추가]
-        elif self.stage == "BATT_WAIT_DOOR_IN":
-            self.cancel_pub.publish(GoalID())
-            rospy.loginfo("🔋 충전 후 복귀 문 밖 QR 완료: 문 열림 대기 중...")
-            # 이 상태는 이미 cb_result에서 설정되었으므로 
-            # QR이 완료되면 문이 열리기를 기다리는 상태로 유지됨
             return
 
     # ===============================
@@ -293,27 +272,11 @@ class AgvTaskManager:
         if not msg.data or self.is_paused: return
         
         if self.stage == "WAIT_DOOR_OUT":
-            rospy.loginfo("🔓 문 열림 확인: 2초 강제 전진 시작 (출발)")
-            self.move_forward_teleop(0.1, 5.0) # 문턱 넘기
             self.stage = "GO_DOOR_OUT"; self.send_goal(*self.pos_door_out_forward)
         elif self.stage == "BATT_WAIT_DOOR_OUT":
-            rospy.loginfo("🔓 문 열림 확인: 2초 강제 전진 시작 (배터리행)")
-            self.move_forward_teleop(0.1, 5.0)
             self.stage = "BATT_GO_DOOR_OUT"; self.send_goal(*self.pos_door_out_forward)
-        
-        # 일반적인 하역 후 복귀
         elif self.stage == "WAIT_DOOR_IN":
-            rospy.loginfo("🔓 문 열림 확인: 2초 강제 전진 시작 (배터리행)")
-            self.move_forward_teleop(0.1, 5.0)
-            self.stage = "GO_HOME"
-            self.send_goal(*self.pos_home)
-            
-        # [추가] 충전 후 복귀 (하역 작업 불필요)
-        elif self.stage == "BATT_WAIT_DOOR_IN":
-            rospy.loginfo("🔓 문 열림 확인: 2초 강제 전진 시작 (배터리행)")
-            self.move_forward_teleop(0.1, 5.0)
-            self.stage = "BATT_GO_HOME_ONLY" # 하역 안 하는 전용 상태
-            self.send_goal(*self.pos_home)
+            self.stage = "GO_HOME"; self.send_goal(*self.pos_home)
 
     def cb_forklift_done(self, msg):
         if not msg.data or self.is_paused: return
@@ -325,7 +288,7 @@ class AgvTaskManager:
         rospy.loginfo("🏁 AGV Task Manager 스핀 시작")
         rospy.spin()
 
-    def wait_for_forklift(self, timeout=40.0): # 지게차 동작 시간을 고려해 타임아웃 넉넉히
+    def wait_for_forklift(self, timeout=30.0): # 지게차 동작 시간을 고려해 타임아웃 넉넉히
         self.forklift_done_flag = False 
         start_time = rospy.get_time()
         
@@ -334,9 +297,9 @@ class AgvTaskManager:
                 rospy.logwarn("⚠️ 지게차 신호 대기 타임아웃! 다음 동작으로 강제 진행합니다.")
                 break
                 
-            # if self.is_paused:
-            #     self.wait_for_resume()
-            #     # 일시정지 후 복귀했을 때 타임아웃 시간을 보정하고 싶다면 start_time을 업데이트 하세요.
+            if self.is_paused:
+                self.wait_for_resume()
+                # 일시정지 후 복귀했을 때 타임아웃 시간을 보정하고 싶다면 start_time을 업데이트 하세요.
                 
             rospy.sleep(0.1)
             
@@ -347,18 +310,12 @@ class AgvTaskManager:
         rospy.loginfo("🏗️ 시퀀스: 적재 시작")
         self.pub_forklift1.publish(Bool(data=False))
         self.wait_for_forklift()
-        self.smart_sleep(4.0)
-        self.move_forward_teleop(0.1, 2.4)
+        self.smart_sleep(3.0)
+        self.move_forward_teleop(0.1, 2.2)
         self.smart_sleep(0.5)
         self.pub_forklift1.publish(Bool(data=True))
         self.wait_for_forklift()
-        self.smart_sleep(4.0)
-        # --- ✨ [수정 부분] 리프트 UP 후 추가 전진 ✨ ---
-        if self.stage == "FORKLIFT_RELOADING_PROCESS":
-            rospy.loginfo("🚚 [재적재] 리프트 UP 후 안전 확보를 위해 1.5초 추가 전진합니다.")
-            self.move_forward_teleop(0.1, 1.0) # 원하는 시간(1.5초)만큼 조절하세요
-            self.smart_sleep(0.5)
-        # ----------------------------------------------
+        self.smart_sleep(3.0)
         self.move_backward_imu(0.1, 2.0)
         self.turn_right_teleop(0.5, 3.0); self.smart_sleep(0.5)
 
@@ -368,10 +325,9 @@ class AgvTaskManager:
             self.stage = "GO_DOOR_OUT_RETURN" 
             self.send_goal(*self.pos_door_out_return)
         else:
-            # ★ 수정: 적재 완료 후 바로 문으로 가지 않고 '경유지'로 이동
-            rospy.loginfo("🚚 적재 완료! 문 앞 경유지로 이동합니다.")
-            self.stage = "GO_WAYPOINT_BEFORE_DOOR"
-            self.send_goal(*self.pos_waypoint_before_door)
+            rospy.loginfo("🚚 일반 적재 완료! 문 안쪽으로 이동합니다.")
+            self.stage = "GO_DOOR_INNER"
+            self.send_goal(*self.pos_door_in)
 
     def run_final_forklift_sequence(self):
         rospy.loginfo("🏗️ 시퀀스: 하역 시작")
@@ -382,14 +338,14 @@ class AgvTaskManager:
         # 물건 내리기
         self.pub_forklift1.publish(Bool(data=False))
         self.wait_for_forklift()
-        self.smart_sleep(4.0)
+        self.smart_sleep(3.0)
         # self.move_forward_teleop(0.1, 2.0)
         self.move_backward_imu(0.1, 2.0); 
 
         # 리프트 업
         self.pub_forklift1.publish(Bool(data=True))
         self.wait_for_forklift()
-        self.smart_sleep(4.0)
+        self.smart_sleep(3.0)
 
 
         # self.move_forward_teleop(0.1, 2.0)
@@ -412,16 +368,11 @@ class AgvTaskManager:
                 return SetBoolResponse(False, "AGV is already busy")
 
             rospy.loginfo("🚀 작업 시작 요청 수신 - 작업 완료 후 응답 예정")
-
-            # 바로 적재 QR 인식 단계로 진입
-            self.stage = "QR_LOAD"
-            self._call_qr_task_async(target_id=30)
             
-            # # 1. 작업 시작 (첫 동작: 좌회전)
-            # # self.turn_left_teleop(0.5, 3.0)
-            # self.stage = "QR_LOAD"
-            # # self._call_qr_task_async(target_id=1)
-            # self._call_qr_task_async(target_id=30)
+            # 1. 작업 시작 (첫 동작: 좌회전)
+            self.turn_left_teleop(0.5, 3.0) 
+            self.stage = "QR_LOAD"
+            self._call_qr_task_async(target_id=1)
 
             # 2. 작업이 완료되어 다시 IDLE이 될 때까지 대기
             rate = rospy.Rate(2) # 0.2초 간격 체크
@@ -457,14 +408,77 @@ class AgvTaskManager:
         
         # 2. 기존 서비스 호출 (QR 노드 가동 트리거)
         threading.Thread(target=lambda: self.qr_task_srv(True) if self.qr_task_srv else None, daemon=True).start()
+        # 별도 스레드에서 실행 (예시)
+    def monitor_system(self):
+        # 초기화 시 파일 생성 (헤더 작성)
+        with open("agv_debug_log.txt", "w") as f:
+            f.write("time,tf_delay\n")
+
+        while not rospy.is_shutdown():
+            try:
+                # TF 지연 시간 계산
+                latest_tf_time = self.tf_listener.getLatestCommonTime('base_footprint', 'imu_link')
+                tf_delay = (rospy.Time.now() - latest_tf_time).to_sec()
+                
+                t = rospy.Time.now().to_sec()
+                with open("agv_debug_log.txt", "a") as f:
+                    f.write(f"{t}, {tf_delay}\n")
+                
+                # 0.1초 이상 지연 발생 시 터미널에도 경고 출력
+                if tf_delay > 0.1:
+                    rospy.logwarn_throttle(1, f"⚠️ 시스템 부하 감지: TF 지연 {tf_delay:.4f}초")
+                    
+            except:
+                pass
+            rospy.sleep(0.1)
 
     def send_goal(self, x, y, yaw_deg):
         if self.is_paused: return
+
+        rospy.loginfo("--- [주행 안정화 시퀀스 시작] ---")
+        
+        # 1. 가속도 잔류 검증 및 강제 초기화
+        # 이전 goal이 남긴 속도 명령이 있는지 확인하고 밀어버립니다.
+        self.cancel_pub.publish(GoalID())
+        for _ in range(3): # 확실히 멈추도록 3번 연속 발행
+            self.cmd_vel_pub.publish(Twist())
+            rospy.sleep(0.05)
+
+        # 2. TF 데이터 무결성 체크 (로그 기록)
+        # imu_link와 base_footprint 사이의 시간차를 계산합니다.
+        try:
+            (trans, rot) = self.tf_listener.lookupTransform('base_footprint', 'imu_link', rospy.Time(0))
+            # TF의 최신 타임스탬프와 현재 시간의 격차를 로그로 출력
+            latest_tf_time = self.tf_listener.getLatestCommonTime('base_footprint', 'imu_link')
+            time_diff = (rospy.Time.now() - latest_tf_time).to_sec()
+            rospy.loginfo(f"📊 TF 지연 상태: {time_diff:.4f}초 (0.1초 이상이면 위험)")
+        except Exception as e:
+            rospy.logerr(f"❌ TF 체크 실패: {e}")
+
+        # 3. 명시적 정지 대기 (Settling Time)
+        # 제어 루프가 '정지'를 완벽히 인지하도록 0.3초 대기
+        rospy.sleep(0.3)
+
+        # 4. TF 연산 대기 로직 (로그 포함)
+        if not self.wait_for_transform():
+            rospy.logwarn("⏳ TF 데이터 불안정: 연산 복구 대기 중...")
+            while not self.wait_for_transform() and not rospy.is_shutdown():
+                if self.is_paused: return
+                rospy.sleep(0.1)
+            rospy.loginfo("✅ TF 연산 복구 완료")
+
+        # 5. 최종 Goal 전송 (Current Time Stamp 사용)
         goal = PoseStamped()
-        goal.header.frame_id, goal.header.stamp = "map", rospy.Time.now()
-        goal.pose.position.x, goal.pose.position.y = x, y
+        goal.header.frame_id = "map"
+        goal.header.stamp = rospy.Time.now() # 최신 위치 기반 주행 강제
+        
+        goal.pose.position.x = x
+        goal.pose.position.y = y
         yaw = math.radians(yaw_deg)
-        goal.pose.orientation.z, goal.pose.orientation.w = math.sin(yaw/2), math.cos(yaw/2)
+        goal.pose.orientation.z = math.sin(yaw/2)
+        goal.pose.orientation.w = math.cos(yaw/2)
+
+        rospy.loginfo(f"🎯 최종 Goal 전송: ({x}, {y}) / 각도: {yaw_deg}")
         self.goal_pub.publish(goal)
 
     def wait_for_resume(self):
@@ -496,6 +510,13 @@ class AgvTaskManager:
         end_time = rospy.Time.now() + rospy.Duration(duration)
         while not rospy.is_shutdown() and rospy.Time.now() < end_time:
             if self.is_paused: self.wait_for_resume()
+
+            # [추가] 연산 지연 시 멈춰서 기다림
+            if not self.wait_for_transform():
+                self.cmd_vel_pub.publish(Twist()) # 정지
+                rospy.sleep(0.05)
+                continue
+
             error = self.get_yaw_error(target_yaw, self.current_yaw)
             t = Twist(); t.linear.x = -abs(speed); t.angular.z = error * kp
             self.cmd_vel_pub.publish(t); rospy.sleep(0.05)
@@ -506,6 +527,7 @@ class AgvTaskManager:
         end = rospy.Time.now() + rospy.Duration(duration)
         while rospy.Time.now() < end and not rospy.is_shutdown():
             if self.is_paused: self.wait_for_resume(); end += rospy.Duration(0.05)
+
             self.cmd_vel_pub.publish(t); rospy.sleep(0.05)
         self.cmd_vel_pub.publish(Twist())
 
@@ -535,27 +557,15 @@ class AgvTaskManager:
             rospy.loginfo("🟢 FENCE CLOSED. Resuming...")
             self.is_paused = False; self.stage = self.prev_stage
             if "GO_" in self.stage:
-                if self.stage == "GO_WAYPOINT_BEFORE_DOOR": 
-                    self.send_goal(*self.pos_waypoint_before_door) # 추가
-                elif self.stage == "DOOR_INNER": self.send_goal(*self.pos_batt_final)
+                if self.stage == "BATT_GO_FINAL": self.send_goal(*self.pos_batt_final)
                 elif "DOOR_INNER" in self.stage: self.send_goal(*self.pos_door_in)
                 elif "DOOR_OUT" in self.stage: self.send_goal(*self.pos_door_out_forward)
                 elif "FINAL" in self.stage: self.send_goal(*self.pos_final)
                 elif "RETURN" in self.stage or "RET_GO_OUT" in self.stage: self.send_goal(*self.pos_door_out_return)
                 elif "HOME" in self.stage: self.send_goal(*self.pos_home)
                 elif self.stage == "GO_AFTER_UNLOAD": self.send_goal(*self.pos_after_unload)
-
-                # [추가] 충전 후 단순히 홈으로 이동 중일 때 재개
-                elif self.stage == "BATT_GO_HOME_ONLY": 
-                    self.send_goal(*self.pos_home)
-
-            # --- QR 인식 중(QR_ 또는 WAIT_DOOR) 상태 재개 ---
-            elif "QR_" in self.stage or "WAIT_DOOR" in self.stage:
-                # [추가] 충전 복귀 문 대기 상태일 때 QR 다시 트리거
-                if self.stage == "BATT_WAIT_DOOR_IN":
-                    self._call_qr_task_async(target_id=34)
-                else:
-                    self._call_qr_task_async(self.current_target_id)
+            elif "QR_" in self.stage:
+                self._call_qr_task_async(self.current_target_id)
 
 if __name__ == "__main__":
     AgvTaskManager().spin()

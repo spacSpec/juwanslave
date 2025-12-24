@@ -17,4 +17,3 @@ GlobalPlanner:                                  # Also see: http://wiki.ros.org/
   lethal_cost: 253                              
   neutral_cost: 66                              
   cost_factor: 0.55    
-

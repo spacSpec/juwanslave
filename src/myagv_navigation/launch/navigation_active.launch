@@ -1,10 +1,11 @@
 <?xml version="1.0"?>
 <launch>
 
-  <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link"
-        args="0.065 0.0 0.08 3.14159265 0.0 0.0 /base_footprint /laser_frame 10" />
   <node pkg="tf" type="static_transform_publisher" name="base_link_to_imu_link"
-        args="-0.015 0.0 0.0 0.0 0.0 0.0 /base_footprint /imu_raw 10" />
+      args="-0.015 0.0 0.0 0.0 0.0 0.0 /base_footprint imu_link 10" />
+
+  <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link"
+      args="0.065 0.0 0.08 3.14159265 0.0 0.0 /base_footprint /laser_frame 10" />
         
   <arg name="map_file" default="$(find myagv_navigation)/map/my_map.yaml"/>
   <node name="map_server_for_test" pkg="map_server" type="map_server" args="$(arg map_file)" output="screen">
@@ -13,7 +14,13 @@
 
   <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization" clear_params="true" output="screen">
     <rosparam command="load" file="$(find agv_task_manager)/config/imu_ekf.yaml"/>
-    <param name="publish_tf" value="false"/>
+    <param name="publish_tf" value="true"/>
+  </node>
+
+  <node pkg="laser_filters" type="scan_to_scan_filter_chain" name="laser_filter" output="screen">
+    <rosparam command="load" file="$(find myagv_navigation)/param/my_laser_filter.yaml" />
+    <remap from="scan" to="/scan" />
+    <remap from="scan_filtered" to="/scan_filtered" />
   </node>
 
   <node pkg="amcl" type="amcl" name="amcl" output="screen">
@@ -21,42 +28,42 @@
     <param name="initial_pose_x" value="6.21"/>  
     <param name="initial_pose_y" value="-1.07"/> 
     <param name="initial_pose_a" value="-1.219"/>
-  </node> 
+    <param name="gui_publish_rate" value="5.0"/> 
+    <param name="transform_tolerance" value="0.5"/>
+    
+    <remap from="scan" to="/scan_filtered" />
+  </node>
 
   <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
+    <remap from="odom" to="/odometry/filtered" />
+    <remap from="scan" to="/scan_filtered" />
+    
     <rosparam file="$(find myagv_navigation)/param/costmap_common_params.yaml" command="load" ns="global_costmap" />
     <rosparam file="$(find myagv_navigation)/param/costmap_common_params.yaml" command="load" ns="local_costmap" />
     <rosparam file="$(find myagv_navigation)/param/local_costmap_params.yaml" command="load" />
     <rosparam file="$(find myagv_navigation)/param/global_costmap_params.yaml" command="load" />
     <rosparam file="$(find myagv_navigation)/config/base_local_planner_params.yaml" command="load" />
-
-    <param name="base_global_planner" value="global_planner/GlobalPlanner"/>
-    <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
-
-    <param name="DWAPlannerROS/holonomic_robot" value="false" />
-    <param name="DWAPlannerROS/max_vel_x" value="0.22" />
-    <param name="DWAPlannerROS/min_vel_x" value="-0.05" /> <param name="DWAPlannerROS/max_vel_theta" value="0.5" /> 
-    <param name="DWAPlannerROS/min_vel_theta" value="0.1" /> <param name="DWAPlannerROS/max_vel_y" value="0.0" />
-    <param name="DWAPlannerROS/min_vel_y" value="0.0" />
-    
-    <param name="DWAPlannerROS/acc_lim_x" value="0.3" />
-    <param name="DWAPlannerROS/acc_lim_theta" value="1.2" /> 
-
-    <param name="DWAPlannerROS/path_distance_bias" value="32.0" /> 
-    <param name="DWAPlannerROS/goal_distance_bias" value="20.0" />
-    <param name="DWAPlannerROS/occdist_scale" value="0.02" />    <param name="DWAPlannerROS/forward_point_distance" value="0.325" />
-    <param name="DWAPlannerROS/penalize_negative_x" value="false" /> <param name="DWAPlannerROS/yaw_goal_tolerance" value="0.15" />
-    <param name="DWAPlannerROS/xy_goal_tolerance" value="0.15" />
-    <param name="DWAPlannerROS/latch_xy_goal_tolerance" value="true" /> <param name="DWAPlannerROS/vx_samples" value="20" />
-    <param name="DWAPlannerROS/vy_samples" value="1" />
-    <param name="DWAPlannerROS/vtheta_samples" value="40" />
-    <param name="DWAPlannerROS/sim_time" value="2.0" />
+    <rosparam file="$(find myagv_navigation)/param/move_base_params.yaml" command="load" />
 
     <param name="controller_frequency" value="5.0"/> 
     <param name="planner_frequency" value="1.0"/>
-    <param name="clearing_rotation_allowed" value="true"/>
+    <param name="transform_tolerance" value="0.5"/> <param name="base_global_planner" value="global_planner/GlobalPlanner"/>
+    <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
+
+    <param name="DWAPlannerROS/max_vel_x" value="0.22" />
+    <param name="DWAPlannerROS/acc_lim_x" value="0.1" />       <param name="DWAPlannerROS/acc_lim_theta" value="0.8" />   <param name="DWAPlannerROS/path_distance_bias" value="24.0" /> 
+    <param name="DWAPlannerROS/goal_distance_bias" value="20.0" />
+    
+    <param name="DWAPlannerROS/sim_time" value="2.0" />
+    <param name="DWAPlannerROS/vx_samples" value="10" />
+    <param name="DWAPlannerROS/vtheta_samples" value="20" />
   </node>
 
+
   <node pkg="rviz" type="rviz" name="rviz" args="-d $(find myagv_navigation)/rviz/teb.rviz"/>
+
+  <include file="$(find agv_task_manager)/launch/imu_filter.launch" />
+
+  <node pkg="agv_task_manager" type="agv_task_manager.py" name="agv_task_manager" output="screen" />
 
 </launch>

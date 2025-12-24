@@ -1,9 +1,8 @@
-frequency: 20
+frequency: 50
 
-sensor_timeout: 0.1
-transform_timeout: 0.1  # 이 값을 0.1 정도로 명시해 주세요 (단위: 초)
+sensor_timeout: 0.2
 two_d_mode: true
-predict_to_current_time: true
+predict_to_current_time: false
 
 # MyAGV.cpp의 TF 발행을 주석 처리했을 때, EKF가 유일한 발행자가 됩니다.
 publish_tf: true 
@@ -41,5 +40,5 @@ imu0_config: [
   false, false, false
 ]
 imu0_differential: false
-imu0_relative: true
+imu0_relative: false
 imu0_twist_rejection_threshold: 2.0
