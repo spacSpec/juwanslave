@@ -1,0 +1,35 @@
+running egg_info
+creating ../../build/stm_controller/stm_controller.egg-info
+writing ../../build/stm_controller/stm_controller.egg-info/PKG-INFO
+writing dependency_links to ../../build/stm_controller/stm_controller.egg-info/dependency_links.txt
+writing entry points to ../../build/stm_controller/stm_controller.egg-info/entry_points.txt
+writing requirements to ../../build/stm_controller/stm_controller.egg-info/requires.txt
+writing top-level names to ../../build/stm_controller/stm_controller.egg-info/top_level.txt
+writing manifest file '../../build/stm_controller/stm_controller.egg-info/SOURCES.txt'
+reading manifest file '../../build/stm_controller/stm_controller.egg-info/SOURCES.txt'
+writing manifest file '../../build/stm_controller/stm_controller.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/taehwan/ros2_ws/build/stm_controller/build
+creating /home/taehwan/ros2_ws/build/stm_controller/build/lib
+creating /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller
+copying stm_controller/__init__.py -> /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller
+copying stm_controller/stm_node.py -> /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller
+running install
+running install_lib
+creating /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller
+copying /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller/__init__.py -> /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller
+copying /home/taehwan/ros2_ws/build/stm_controller/build/lib/stm_controller/stm_node.py -> /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller
+byte-compiling /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller/__init__.py to __init__.cpython-310.pyc
+byte-compiling /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller/stm_node.py to stm_node.cpython-310.pyc
+running install_data
+creating /home/taehwan/ros2_ws/install/stm_controller/share/ament_index
+creating /home/taehwan/ros2_ws/install/stm_controller/share/ament_index/resource_index
+creating /home/taehwan/ros2_ws/install/stm_controller/share/ament_index/resource_index/packages
+copying resource/stm_controller -> /home/taehwan/ros2_ws/install/stm_controller/share/ament_index/resource_index/packages
+copying package.xml -> /home/taehwan/ros2_ws/install/stm_controller/share/stm_controller
+running install_egg_info
+Copying ../../build/stm_controller/stm_controller.egg-info to /home/taehwan/ros2_ws/install/stm_controller/lib/python3.10/site-packages/stm_controller-0.1.0-py3.10.egg-info
+running install_scripts
+Installing stm_node script to /home/taehwan/ros2_ws/install/stm_controller/lib/stm_controller
+writing list of installed files to '/home/taehwan/ros2_ws/build/stm_controller/install.log'

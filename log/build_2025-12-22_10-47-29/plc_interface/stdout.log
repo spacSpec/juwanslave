@@ -1,0 +1,38 @@
+running egg_info
+creating ../../build/plc_interface/plc_interface.egg-info
+writing ../../build/plc_interface/plc_interface.egg-info/PKG-INFO
+writing dependency_links to ../../build/plc_interface/plc_interface.egg-info/dependency_links.txt
+writing entry points to ../../build/plc_interface/plc_interface.egg-info/entry_points.txt
+writing requirements to ../../build/plc_interface/plc_interface.egg-info/requires.txt
+writing top-level names to ../../build/plc_interface/plc_interface.egg-info/top_level.txt
+writing manifest file '../../build/plc_interface/plc_interface.egg-info/SOURCES.txt'
+reading manifest file '../../build/plc_interface/plc_interface.egg-info/SOURCES.txt'
+writing manifest file '../../build/plc_interface/plc_interface.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/taehwan/ros2_ws/build/plc_interface/build
+creating /home/taehwan/ros2_ws/build/plc_interface/build/lib
+creating /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface
+copying plc_interface/db.py -> /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface
+copying plc_interface/plc_node.py -> /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface
+copying plc_interface/__init__.py -> /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface
+running install
+running install_lib
+creating /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface
+copying /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface/db.py -> /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface
+copying /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface/plc_node.py -> /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface
+copying /home/taehwan/ros2_ws/build/plc_interface/build/lib/plc_interface/__init__.py -> /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface
+byte-compiling /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface/db.py to db.cpython-310.pyc
+byte-compiling /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface/plc_node.py to plc_node.cpython-310.pyc
+byte-compiling /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface/__init__.py to __init__.cpython-310.pyc
+running install_data
+creating /home/taehwan/ros2_ws/install/plc_interface/share/ament_index
+creating /home/taehwan/ros2_ws/install/plc_interface/share/ament_index/resource_index
+creating /home/taehwan/ros2_ws/install/plc_interface/share/ament_index/resource_index/packages
+copying resource/plc_interface -> /home/taehwan/ros2_ws/install/plc_interface/share/ament_index/resource_index/packages
+copying package.xml -> /home/taehwan/ros2_ws/install/plc_interface/share/plc_interface
+running install_egg_info
+Copying ../../build/plc_interface/plc_interface.egg-info to /home/taehwan/ros2_ws/install/plc_interface/lib/python3.10/site-packages/plc_interface-0.0.1-py3.10.egg-info
+running install_scripts
+Installing plc_node script to /home/taehwan/ros2_ws/install/plc_interface/lib/plc_interface
+writing list of installed files to '/home/taehwan/ros2_ws/build/plc_interface/install.log'

@@ -27,7 +27,7 @@ SLAVE_ID = 3
 M0 = 0x0000  # door_state 명령용 (PLC -> STM32)
 M1 = 0x0001  # is_empty용
 M2 = 0x0002  # 검사 요청
-M3 = 0x0003  # 검사 결과
+M3 = 0x0014  # 검사 결과
 M4 = 0x0004  # fence_open 상태
 # M5 = 0x0005  # 🔥 door_open 은 사용 안 함
 
@@ -252,6 +252,7 @@ class PLCNode(Node):
                 self.get_logger().warn(
                     "PLC M2 rising edge → /plc/robotarm_detect 서비스 요청!"
                 )
+                coils[M3] = 0 
                 self.detect_busy = True
                 self.call_robot_detect()
 

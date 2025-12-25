@@ -4,7 +4,7 @@ from std_srvs.srv import SetBool
 import socket
 import time
 
-ESP32_IP = "172.30.1.45"  # << 반드시 너의 ESP32 IP로 수정
+ESP32_IP = "172.30.1.49"  # << 반드시 너의 ESP32 IP로 수정
 ESP32_PORT = 5000
 
 
@@ -41,7 +41,7 @@ class StmNode(Node):
     def send_open_command(self):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(3.0)
+            sock.settimeout(5.0)
             sock.connect((ESP32_IP, ESP32_PORT))
 
             sock.send(b'O')

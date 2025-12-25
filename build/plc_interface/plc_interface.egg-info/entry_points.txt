@@ -1,4 +1,3 @@
 [console_scripts]
-db = plc_interface.db:main
 plc_node = plc_interface.plc_node:main
 

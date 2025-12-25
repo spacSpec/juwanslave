@@ -21,7 +21,6 @@ setup(
     entry_points={
         'console_scripts': [
             'plc_node = plc_interface.plc_node:main',
-            'db = plc_interface.db:main',
         ],
     },
 )
