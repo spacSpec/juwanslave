@@ -13,7 +13,7 @@ import sys
 # ===================== [설정] =====================
 PORT = '/dev/ttyACM0'
 BAUD = 115200
-speed = 40
+speed = 55
 high = 255
 POSE_WAIT = [-108.19, -37.17, 80.15, 40.81, -88.2, -19.07]
 
@@ -21,11 +21,11 @@ POSE_WAIT = [-108.19, -37.17, 80.15, 40.81, -88.2, -19.07]
 PICK_ORIENTATION_RX = -170
 PICK_ORIENTATION_RY = -1.88
 
-BOX_BASE_POSE = [-255.5, 43.4, 120.7, 177.43, 3.33, -0.89]
-BOX_OFFSET_Y = -63.0 
+BOX_BASE_POSE = [-255.5, 43.4, 130.7, 177.43, 3.33, -0.89]
+BOX_OFFSET_Y = -65.0 
 
 # 충돌 감지 임계값 (mA)
-COLLISION_THRESHOLD = 2500 
+COLLISION_THRESHOLD = 500 
 
 class ArmDriverNode(Node):
     def __init__(self):
@@ -196,7 +196,7 @@ class ArmDriverNode(Node):
             # 1. 충돌 감지
             try:
                 currents = self.mc.get_servo_currents()
-                if currents and len(currents) == 6:
+                if isinstance(currents, list) and len(currents) == 6:
                     if max(currents) > COLLISION_THRESHOLD:
                         self.mc.stop()
                         raise RuntimeError(f"🚨 충돌 감지! (Current: {max(currents)}mA)")
