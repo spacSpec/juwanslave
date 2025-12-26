@@ -47,8 +47,8 @@ BOX_ROI_H = 350
 BOX_FULL_THRESHOLD = 3  
 
 CUBE_REAL_SIZE_MM = 50.0 
-CENTER_ROBOT_X = -42.0   
-CENTER_ROBOT_Y = 235.0   
+CENTER_ROBOT_X = -42.0  
+CENTER_ROBOT_Y = 225.0   
 FRAME_TIMEOUT_SEC = 1.0 
 
 # [천재 심영주 HSV 설정값] (툴 검증 완료)
@@ -136,7 +136,7 @@ class VisionNode(Node):
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 960)
             self.cap.set(cv2.CAP_PROP_FPS, 15)
             
-            time.sleep(2) 
+            time.sleep(2)
             self.is_camera_open = True
             
             w = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
@@ -443,7 +443,7 @@ class VisionNode(Node):
                     else: final_angle = raw_angle
                     
                     # 보정값 적용 (캘리브레이션)
-                    OFFSET_ANGLE = -20.0 
+                    OFFSET_ANGLE = -10.0 
                     final_angle += OFFSET_ANGLE
                     
                     self.get_logger().info(f"📐 Refined Angle: {final_angle:.1f}")
