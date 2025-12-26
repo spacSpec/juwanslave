@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
@@ -62,6 +63,7 @@ class TaskManagerNode(Node):
 
         self.count_pub = self.create_publisher(Int32, '/robot/work_cnt', 10)
         
+        self.is_arm_moving = False
         self.is_system_active = False 
         self.is_waiting_agv = False 
         self.total_count = 0 
@@ -133,6 +135,12 @@ class TaskManagerNode(Node):
 
     def handle_controller_trigger(self, request, response):
         self.get_logger().info("📢 Cmd from Ros Controller: EXECUTE TASK")
+        
+        if self.is_arm_moving or self.is_waiting_agv:
+            self.get_logger().warn(f"⚠️ Ignored: Robot is BUSY (Moving: {self.is_arm_moving}, AGV: {self.is_waiting_agv})")
+            response.success = False
+            response.message = "BUSY"
+            return response
         
         result_msg = self._execute_task_logic(source="SERVICE")
         
@@ -208,6 +216,8 @@ class TaskManagerNode(Node):
             self.get_logger().error("❌ Arm service not available!")
             return
 
+        self.is_arm_moving = True
+
         req = ArmCommand.Request()
         req.command = cmd
         req.target_coord = coord
@@ -220,6 +230,8 @@ class TaskManagerNode(Node):
             result = future.result()
             self.get_logger().info(f"🤖 Arm Status: {result.message}")
             
+            self.is_arm_moving = False
+
             self.total_count += 1
             msg = Int32()
             msg.data = self.total_count
@@ -229,6 +241,8 @@ class TaskManagerNode(Node):
             
         except Exception as e:
             self.get_logger().error(f"❌ Callback Error: {e}")
+            self.is_arm_moving = False 
+
 
     def check_box_and_act(self):
         if not self.vision_box_client.wait_for_service(1.0):
